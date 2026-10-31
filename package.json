@@ -1,0 +1,39 @@
+{
+  "name": "tournament-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "tsc src/tests/fantasy.test.ts src/tests/bracket.test.ts src/tests/tournament_flow.test.ts src/lib/fantasy.ts src/lib/bracket.ts src/lib/db.ts --outDir ./dist-tests --module commonjs --target es2022 --esModuleInterop --skipLibCheck && node ./dist-tests/tests/fantasy.test.js && node ./dist-tests/tests/bracket.test.js && node ./dist-tests/tests/tournament_flow.test.js"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "@next/swc-linux-x64-gnu": "^16.4.3",
+    "@prisma/client": "^7.10.1",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "csstype": "^3.2.3",
+    "jose": "^6.2.14",
+    "lucide-react": "^1.66.0",
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.15",
+    "@tailwindcss/turbopack": "^4",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "prisma": "^8.0.0-rc.29",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
