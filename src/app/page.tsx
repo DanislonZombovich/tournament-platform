@@ -50,6 +50,7 @@ interface TournamentItem {
   prize_pool: string | null;
   banner_url: string | null;
   status: string;
+  creator_id?: string | null;
 }
 
 function HomeContent() {
@@ -57,6 +58,7 @@ function HomeContent() {
   const queryTournamentId = searchParams.get("tournament_id") || "";
 
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const [tournament, setTournament] = useState<TournamentItem | null>(null);
   const [tournamentsList, setTournamentsList] = useState<TournamentItem[]>([]);
   const [matches, setMatches] = useState<MatchItem[]>([]);
@@ -66,18 +68,21 @@ function HomeContent() {
   const loadData = async (tournId = queryTournamentId) => {
     try {
       const url = tournId ? `/api/tournaments?id=${encodeURIComponent(tournId)}` : "/api/tournaments";
-      const [tournRes, teamsRes] = await Promise.all([
+      const [tournRes, teamsRes, authRes] = await Promise.all([
         fetch(url),
         fetch("/api/teams"),
+        fetch("/api/auth/me"),
       ]);
 
       const tournJson = await tournRes.json();
       const teamsJson = await teamsRes.json();
+      const authJson = await authRes.json();
 
       setTournament(tournJson.tournament);
       setTournamentsList(tournJson.tournaments || []);
       setMatches(tournJson.matches || []);
       setTeams(teamsJson.teams || []);
+      setUser(authJson.user || null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -209,6 +214,16 @@ function HomeContent() {
         </div>
 
         <div className="flex items-center gap-2">
+          {tournament && user && (user.role === "admin" || user.id === tournament.creator_id) && (
+            <a
+              href={`/tournaments?edit=${tournament.id}`}
+              className="px-3.5 py-1.5 rounded-lg bg-blue-900/50 hover:bg-blue-850 border border-cyan-500/40 text-cyan-300 hover:text-white font-bold text-xs transition flex items-center gap-1.5 shadow-sm"
+              title="Редактировать настройки этого турнира"
+            >
+              <span>⚙️</span>
+              <span>Настройки турнира</span>
+            </a>
+          )}
           <a
             href="/tournaments"
             className="px-3.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-cyan-300 font-bold text-xs transition"

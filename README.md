@@ -1,4 +1,4 @@
-# Dota 2 Tournament Platform & Fantasy League
+# Danislon Tournaments — Dota 2 Esports & Fantasy Platform
 
 Современная киберспортивная платформа для организации и проведения турниров по Dota 2 с интерактивной сеткой плей-офф, фэнтези-лигой по правилам The International Compendium, прогнозами на матчи (Pick'ems) и жесткой системой валидации составов команд через Steam OpenID.
 

@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // 1. Action: CREATE NEW TOURNAMENT
-    if (body.action === "create" || (body.title && !body.team_id)) {
+    if (body.action === "create" || (body.title && !body.team_id && !body.id && body.action !== "update" && body.action !== "edit")) {
       const {
         title,
         description,
@@ -164,6 +164,16 @@ export async function POST(req: NextRequest) {
         message: `Турнир "${cleanTitle}" успешно создан!`,
         tournament_id: tournamentId,
       }, { status: 201 });
+    }
+
+    // 2. Action: UPDATE / EDIT TOURNAMENT
+    if (body.action === "update" || body.action === "edit") {
+      return await handleTournamentUpdate(user, body);
+    }
+
+    // 3. Action: DELETE TOURNAMENT
+    if (body.action === "delete") {
+      return await handleTournamentDelete(user, body.tournament_id || body.id);
     }
 
     // 2. Action: REGISTER TEAM TO TOURNAMENT
@@ -290,6 +300,187 @@ export async function POST(req: NextRequest) {
       success: true,
       message: `Команда ${team.name} успешно зарегистрирована на турнир "${tournament.title}"!`,
     });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+async function handleTournamentUpdate(user: any, body: any) {
+  const {
+    id,
+    title,
+    description,
+    format,
+    max_teams,
+    is_public,
+    access_code,
+    prize_pool,
+    banner_url,
+    status,
+    is_fantasy_locked,
+    is_predictions_locked,
+  } = body;
+
+  if (!id) {
+    return NextResponse.json({ error: "Укажите ID турнира" }, { status: 400 });
+  }
+
+  const tournRes = await query<{
+    id: string;
+    title: string;
+    description: string | null;
+    format: string;
+    max_teams: number;
+    is_public: boolean;
+    access_code: string | null;
+    prize_pool: string | null;
+    banner_url: string | null;
+    status: string;
+    creator_id: string | null;
+    is_fantasy_locked: boolean;
+    is_predictions_locked: boolean;
+  }>("SELECT * FROM tournaments WHERE id = $1", [id]);
+
+  if (tournRes.rows.length === 0) {
+    return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+  }
+
+  const current = tournRes.rows[0];
+  const isCreator = Boolean(current.creator_id && current.creator_id === user.id);
+  const isAdmin = user.role === "admin";
+
+  if (!isCreator && !isAdmin) {
+    return NextResponse.json(
+      { error: "У вас нет прав на редактирование этого турнира (только создатель турнира или администратор)" },
+      { status: 403 }
+    );
+  }
+
+  const updatedTitle = typeof title === "string" ? title.trim() : current.title;
+  if (!updatedTitle || updatedTitle.length < 3) {
+    return NextResponse.json({ error: "Название турнира должно содержать от 3 символов" }, { status: 400 });
+  }
+
+  const updatedDesc = description !== undefined ? (description ? description.trim() : "") : current.description;
+  const updatedFormat = format || current.format;
+  const updatedMaxTeams = max_teams ? Number(max_teams) : current.max_teams;
+  const updatedPrize = prize_pool !== undefined ? prize_pool : current.prize_pool;
+  const updatedBanner = banner_url !== undefined ? banner_url : current.banner_url;
+  const updatedPublic = is_public !== undefined ? Boolean(is_public) : current.is_public;
+  const updatedCode = updatedPublic ? null : (access_code !== undefined ? access_code : current.access_code);
+  const updatedStatus = status || current.status;
+  const updatedFantasyLock = is_fantasy_locked !== undefined ? Boolean(is_fantasy_locked) : current.is_fantasy_locked;
+  const updatedPredLock = is_predictions_locked !== undefined ? Boolean(is_predictions_locked) : current.is_predictions_locked;
+
+  await query(
+    `UPDATE tournaments SET
+      title = $1,
+      description = $2,
+      format = $3,
+      max_teams = $4,
+      prize_pool = $5,
+      banner_url = $6,
+      is_public = $7,
+      access_code = $8,
+      status = $9,
+      is_fantasy_locked = $10,
+      is_predictions_locked = $11
+     WHERE id = $12`,
+    [
+      updatedTitle,
+      updatedDesc,
+      updatedFormat,
+      updatedMaxTeams,
+      updatedPrize,
+      updatedBanner,
+      updatedPublic,
+      updatedCode,
+      updatedStatus,
+      updatedFantasyLock,
+      updatedPredLock,
+      id,
+    ]
+  );
+
+  return NextResponse.json({
+    success: true,
+    message: `Настройки турнира "${updatedTitle}" успешно сохранены!`,
+    tournament_id: id,
+  });
+}
+
+async function handleTournamentDelete(user: any, tournamentId: string) {
+  if (!tournamentId) {
+    return NextResponse.json({ error: "Укажите ID турнира для удаления" }, { status: 400 });
+  }
+
+  if (tournamentId === "ti-2026-main") {
+    return NextResponse.json({ error: "Главный системный турнир The International 2026 нельзя удалить" }, { status: 400 });
+  }
+
+  const tournRes = await query<{
+    id: string;
+    title: string;
+    creator_id: string | null;
+  }>("SELECT id, title, creator_id FROM tournaments WHERE id = $1", [tournamentId]);
+
+  if (tournRes.rows.length === 0) {
+    return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+  }
+
+  const current = tournRes.rows[0];
+  const isCreator = Boolean(current.creator_id && current.creator_id === user.id);
+  const isAdmin = user.role === "admin";
+
+  if (!isCreator && !isAdmin) {
+    return NextResponse.json(
+      { error: "У вас нет прав на удаление этого турнира (только создатель или администратор)" },
+      { status: 403 }
+    );
+  }
+
+  // Cascade delete matches, teams associations, predictions, fantasy cards
+  await query("DELETE FROM tournament_teams WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM matches WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM predictions WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM fantasy_cards WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM tournaments WHERE id = $1", [tournamentId]);
+
+  return NextResponse.json({
+    success: true,
+    message: `Турнир "${current.title}" успешно удален!`,
+  });
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    const body = await req.json();
+    return await handleTournamentUpdate(user, body);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    const body = await req.json();
+    return await handleTournamentUpdate(user, body);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    const { searchParams } = new URL(req.url);
+    const tournamentId = searchParams.get("id") || searchParams.get("tournament_id");
+    return await handleTournamentDelete(user, tournamentId || "");
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
   }

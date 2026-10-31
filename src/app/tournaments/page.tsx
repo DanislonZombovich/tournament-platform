@@ -14,6 +14,7 @@ interface TournamentItem {
   prize_pool: string | null;
   banner_url: string | null;
   status: string;
+  creator_id?: string | null;
   is_fantasy_locked: boolean;
   is_predictions_locked: boolean;
   teams_count: string;
@@ -41,6 +42,24 @@ export default function TournamentsPage() {
   const [createPrizePool, setCreatePrizePool] = useState("$25,000");
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  // Edit / Settings Modal
+  const [editTourn, setEditTourn] = useState<TournamentItem | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [editFormat, setEditFormat] = useState("double_elimination");
+  const [editMaxTeams, setEditMaxTeams] = useState(8);
+  const [editIsPublic, setEditIsPublic] = useState(true);
+  const [editAccessCode, setEditAccessCode] = useState("");
+  const [editPrizePool, setEditPrizePool] = useState("$25,000");
+  const [editStatus, setEditStatus] = useState("registration");
+  const [editBannerUrl, setEditBannerUrl] = useState("/banner.jpg");
+  const [editFantasyLocked, setEditFantasyLocked] = useState(false);
+  const [editPredictionsLocked, setEditPredictionsLocked] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Register Team Modal
   const [registerTourn, setRegisterTourn] = useState<TournamentItem | null>(null);
@@ -88,6 +107,107 @@ export default function TournamentsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const openEditModal = (t: TournamentItem) => {
+    setEditTourn(t);
+    setEditTitle(t.title);
+    setEditDesc(t.description || "");
+    setEditFormat(t.format || "double_elimination");
+    setEditMaxTeams(t.max_teams || 8);
+    setEditIsPublic(t.is_public);
+    setEditAccessCode(t.access_code || "");
+    setEditPrizePool(t.prize_pool || "$25,000");
+    setEditStatus(t.status || "registration");
+    setEditBannerUrl(t.banner_url || "/banner.jpg");
+    setEditFantasyLocked(Boolean(t.is_fantasy_locked));
+    setEditPredictionsLocked(Boolean(t.is_predictions_locked));
+    setEditError(null);
+    setEditSuccess(null);
+    setIsDeleting(false);
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && tournaments.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const editId = params.get("edit");
+      if (editId) {
+        const target = tournaments.find((t) => t.id === editId);
+        if (target) {
+          openEditModal(target);
+        }
+      }
+    }
+  }, [tournaments]);
+
+  const handleUpdateTournament = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTourn) return;
+
+    setEditLoading(true);
+    setEditError(null);
+    setEditSuccess(null);
+
+    try {
+      const res = await fetch("/api/tournaments", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editTourn.id,
+          title: editTitle,
+          description: editDesc,
+          format: editFormat,
+          max_teams: editMaxTeams,
+          is_public: editIsPublic,
+          access_code: editIsPublic ? null : editAccessCode,
+          prize_pool: editPrizePool,
+          banner_url: editBannerUrl,
+          status: editStatus,
+          is_fantasy_locked: editFantasyLocked,
+          is_predictions_locked: editPredictionsLocked,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка сохранения настроек");
+
+      setEditSuccess(data.message || "Настройки турнира успешно сохранены!");
+      await loadData();
+      setTimeout(() => {
+        setEditTourn(null);
+        setEditSuccess(null);
+      }, 1200);
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleDeleteTournament = async () => {
+    if (!editTourn) return;
+    if (!confirm(`Вы действительно хотите удалить турнир "${editTourn.title}"? Это действие необратимо!`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    setEditError(null);
+
+    try {
+      const res = await fetch(`/api/tournaments?id=${encodeURIComponent(editTourn.id)}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка при удалении турнира");
+
+      setEditTourn(null);
+      await loadData();
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleCreateTournament = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -373,6 +493,17 @@ export default function TournamentsPage() {
                       Регистрация
                     </button>
                   )}
+
+                  {user && (user.role === "admin" || user.id === t.creator_id) && (
+                    <button
+                      onClick={() => openEditModal(t)}
+                      className="py-2 px-2.5 rounded-lg bg-[#0e1d3d] hover:bg-blue-900/60 border border-cyan-500/40 text-cyan-300 hover:text-white font-extrabold text-xs transition flex items-center gap-1 shadow-sm"
+                      title="Настройки турнира"
+                    >
+                      <span>⚙️</span>
+                      <span className="hidden sm:inline">Настройки</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -525,6 +656,219 @@ export default function TournamentsPage() {
               >
                 {createLoading ? "Создание..." : "Создать и опубликовать турнир"}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT / SETTINGS TOURNAMENT MODAL */}
+      {editTourn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-xl bg-[#091122] border border-cyan-500/50 rounded-2xl p-6 sm:p-7 shadow-2xl shadow-cyan-500/20 max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setEditTourn(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition text-lg"
+            >
+              ✕
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="inline-block p-2.5 bg-cyan-500/10 rounded-xl border border-cyan-500/30 mb-2">
+                <span className="text-2xl">⚙️</span>
+              </div>
+              <h2 className="text-xl font-black text-white">Управление и настройки турнира</h2>
+              <p className="text-xs text-slate-400 mt-1 font-mono">
+                ID: <span className="text-cyan-400">{editTourn.id}</span>
+              </p>
+            </div>
+
+            {editError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-950/70 border border-red-500/40 text-red-300 text-xs font-semibold">
+                {editError}
+              </div>
+            )}
+
+            {editSuccess && (
+              <div className="mb-4 p-3 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+                ✓ {editSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateTournament} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Название турнира <span className="text-cyan-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Описание турнира
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Статус турнира
+                  </label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition font-bold"
+                  >
+                    <option value="registration">🟢 Регистрация открыта</option>
+                    <option value="ongoing">🔵 Идет турнир (Сетка активна)</option>
+                    <option value="completed">⚫ Завершен</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Формат турнира
+                  </label>
+                  <select
+                    value={editFormat}
+                    onChange={(e) => setEditFormat(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                  >
+                    <option value="double_elimination">Double Elimination (Сетка лузеров)</option>
+                    <option value="single_elimination">Single Elimination (На выбывание)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Лимит команд
+                  </label>
+                  <select
+                    value={editMaxTeams}
+                    onChange={(e) => setEditMaxTeams(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                  >
+                    <option value={4}>4 команды</option>
+                    <option value={8}>8 команд</option>
+                    <option value={16}>16 команд</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Призовой фонд
+                  </label>
+                  <input
+                    type="text"
+                    value={editPrizePool}
+                    onChange={(e) => setEditPrizePool(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Видимость турнира
+                  </label>
+                  <select
+                    value={editIsPublic ? "public" : "private"}
+                    onChange={(e) => setEditIsPublic(e.target.value === "public")}
+                    className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                  >
+                    <option value="public">Публичный (виден всем)</option>
+                    <option value="private">Приватный (по паролю)</option>
+                  </select>
+                </div>
+
+                {!editIsPublic ? (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Пароль турнира
+                    </label>
+                    <input
+                      type="text"
+                      value={editAccessCode}
+                      onChange={(e) => setEditAccessCode(e.target.value)}
+                      placeholder="Код доступа"
+                      className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      URL баннера
+                    </label>
+                    <input
+                      type="text"
+                      value={editBannerUrl}
+                      onChange={(e) => setEditBannerUrl(e.target.value)}
+                      placeholder="/banner.jpg"
+                      className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Locks toggles */}
+              <div className="p-3.5 rounded-xl bg-[#070e1c] border border-blue-900/40 space-y-2.5">
+                <span className="text-xs font-bold text-slate-300 block uppercase tracking-wider">
+                  Блокировки и правила
+                </span>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={editFantasyLocked}
+                    onChange={(e) => setEditFantasyLocked(e.target.checked)}
+                    className="rounded bg-[#0d182e] border-blue-900 text-cyan-500 focus:ring-0"
+                  />
+                  <span>🔒 Заблокировать изменения карточек в Фэнтези</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={editPredictionsLocked}
+                    onChange={(e) => setEditPredictionsLocked(e.target.checked)}
+                    className="rounded bg-[#0d182e] border-blue-900 text-cyan-500 focus:ring-0"
+                  />
+                  <span>🔒 Заблокировать прием прогнозов на матчи</span>
+                </label>
+              </div>
+
+              <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="flex-1 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 transition disabled:opacity-50"
+                >
+                  {editLoading ? "Сохранение..." : "💾 Сохранить настройки"}
+                </button>
+
+                {editTourn.id !== "ti-2026-main" && (
+                  <button
+                    type="button"
+                    onClick={handleDeleteTournament}
+                    disabled={isDeleting}
+                    className="py-3 px-4 rounded-xl bg-red-950/60 hover:bg-red-900 border border-red-500/40 text-red-300 hover:text-white font-bold text-xs uppercase tracking-wider transition disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {isDeleting ? "Удаление..." : "🗑️ Удалить турнир"}
+                  </button>
+                )}
+              </div>
             </form>
           </div>
         </div>

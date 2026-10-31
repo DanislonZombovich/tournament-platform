@@ -45,7 +45,7 @@ export default function LeaderboardPage() {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-cyan-300 text-xs font-bold uppercase tracking-widest mb-3">
               <span>👑</span>
-              <span>Hall of Fame Dota 2 Tournament Platform</span>
+              <span>Danislon Tournaments Hall of Fame</span>
             </div>
             <h1 className="text-3xl font-black text-white tracking-tight">
               ТАБЛИЦА ЛИДЕРОВ

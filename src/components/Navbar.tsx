@@ -38,8 +38,8 @@ export default function Navbar() {
                 <img src="/logo.jpg" alt="Aegis" className="w-full h-full object-cover" />
               </div>
               <div className="flex flex-col">
-                <span className="font-extrabold text-base tracking-wider text-white">DOTA 2 PLATFORM</span>
-                <span className="text-[10px] tracking-widest text-cyan-400 font-bold uppercase -mt-0.5">Tournaments & Fantasy</span>
+                <span className="font-extrabold text-base tracking-wider text-white">DANISLON TOURNAMENTS</span>
+                <span className="text-[10px] tracking-widest text-cyan-400 font-bold uppercase -mt-0.5">Dota 2 Esports & Fantasy</span>
               </div>
             </a>
 
