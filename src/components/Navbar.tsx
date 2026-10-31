@@ -115,6 +115,12 @@ export default function Navbar() {
                       alt={user.username}
                       className="w-7 h-7 rounded-lg object-cover border border-cyan-400/50"
                     />
+                  ) : user.discord_avatar ? (
+                    <img
+                      src={user.discord_avatar}
+                      alt={user.username}
+                      className="w-7 h-7 rounded-lg object-cover border border-[#5865F2]"
+                    />
                   ) : (
                     <div className="w-7 h-7 rounded-lg bg-blue-900 flex items-center justify-center text-xs font-bold text-cyan-300">
                       {user.username.slice(0, 2).toUpperCase()}

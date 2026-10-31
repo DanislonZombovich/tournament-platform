@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+import { getCurrentUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 
 export async function GET(
@@ -82,6 +84,172 @@ export async function GET(
       primarySlotsFilled,
       allSteamLinked,
     });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    }
+
+    const { id: teamId } = await params;
+    const body = await req.json();
+    const { target_user_id, new_role_slot } = body;
+
+    if (!target_user_id || !new_role_slot) {
+      return NextResponse.json({ error: "Укажите игрока и новую роль" }, { status: 400 });
+    }
+
+    const teamRes = await query<{
+      id: string;
+      name: string;
+      captain_id: string;
+    }>("SELECT id, name, captain_id FROM teams WHERE id = $1", [teamId]);
+
+    if (teamRes.rows.length === 0) {
+      return NextResponse.json({ error: "Команда не найдена" }, { status: 404 });
+    }
+
+    const team = teamRes.rows[0];
+    const isCaptain = team.captain_id === user.id;
+    const isAdmin = user.role === "admin";
+    const isSelf = target_user_id === user.id;
+
+    if (!isCaptain && !isAdmin && !isSelf) {
+      return NextResponse.json(
+        { error: "Только капитан команды или администратор может менять расстановку ролей" },
+        { status: 403 }
+      );
+    }
+
+    const validSlots = ["pos1", "pos2", "pos3", "pos4", "pos5", "sub1", "sub2"];
+    if (!validSlots.includes(new_role_slot)) {
+      return NextResponse.json({ error: "Недопустимый слот роли" }, { status: 400 });
+    }
+
+    // Get current member
+    const currentMemberRes = await query<{
+      id: string;
+      role_slot: string;
+      username: string;
+    }>(
+      `SELECT tm.id, tm.role_slot, u.username
+       FROM team_members tm
+       JOIN users u ON u.id = tm.user_id
+       WHERE tm.team_id = $1 AND tm.user_id = $2`,
+      [team.id, target_user_id]
+    );
+
+    if (currentMemberRes.rows.length === 0) {
+      return NextResponse.json({ error: "Игрок не состоит в этой команде" }, { status: 404 });
+    }
+
+    const currentMember = currentMemberRes.rows[0];
+    const oldSlot = currentMember.role_slot;
+
+    if (oldSlot === new_role_slot) {
+      return NextResponse.json({ message: "Игрок уже занимает эту позицию" });
+    }
+
+    // Check if new_role_slot is occupied
+    const targetSlotRes = await query<{
+      id: string;
+      user_id: string;
+      username: string;
+    }>(
+      `SELECT tm.id, tm.user_id, u.username
+       FROM team_members tm
+       JOIN users u ON u.id = tm.user_id
+       WHERE tm.team_id = $1 AND tm.role_slot = $2`,
+      [team.id, new_role_slot]
+    );
+
+    if (targetSlotRes.rows.length === 0) {
+      // Slot is empty - move player to new_role_slot
+      await query(
+        `UPDATE team_members SET role_slot = $1 WHERE id = $2`,
+        [new_role_slot, currentMember.id]
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: `Игрок ${currentMember.username} успешно переведен на слот ${new_role_slot}!`,
+      });
+    }
+
+    // Slot is occupied - this is a swap between two players
+    if (!isCaptain && !isAdmin) {
+      return NextResponse.json(
+        { error: `Слот ${new_role_slot} уже занят. Только капитан может производить обмен позициями между игроками.` },
+        { status: 403 }
+      );
+    }
+
+    const occupant = targetSlotRes.rows[0];
+
+    // Safely swap using a temporary placeholder to avoid unique constraint conflict on (team_id, role_slot)
+    const tempSlot = `tmp_${crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).substring(2, 8)}`;
+    await query(`UPDATE team_members SET role_slot = $1 WHERE id = $2`, [tempSlot, occupant.id]);
+    await query(`UPDATE team_members SET role_slot = $1 WHERE id = $2`, [new_role_slot, currentMember.id]);
+    await query(`UPDATE team_members SET role_slot = $1 WHERE id = $2`, [oldSlot, occupant.id]);
+
+    return NextResponse.json({
+      success: true,
+      message: `Роли успешно обменены: ${currentMember.username} перешел на ${new_role_slot}, а ${occupant.username} на ${oldSlot}!`,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  return PATCH(req, context);
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+
+    const { id: teamId } = await params;
+    const { searchParams } = new URL(req.url);
+    const targetUserId = searchParams.get("user_id") || user.id;
+
+    const teamRes = await query<{ id: string; captain_id: string }>(
+      "SELECT id, captain_id FROM teams WHERE id = $1",
+      [teamId]
+    );
+    if (teamRes.rows.length === 0) return NextResponse.json({ error: "Команда не найдена" }, { status: 404 });
+
+    const team = teamRes.rows[0];
+    const isCaptain = team.captain_id === user.id;
+    const isAdmin = user.role === "admin";
+    const isSelf = targetUserId === user.id;
+
+    if (!isCaptain && !isAdmin && !isSelf) {
+      return NextResponse.json({ error: "У вас нет прав на исключение игроков из команды" }, { status: 403 });
+    }
+
+    if (isCaptain && targetUserId === team.captain_id) {
+      return NextResponse.json({ error: "Капитан не может покинуть команду, пока не передаст капитанство" }, { status: 400 });
+    }
+
+    await query("DELETE FROM team_members WHERE team_id = $1 AND user_id = $2", [team.id, targetUserId]);
+
+    return NextResponse.json({ success: true, message: "Игрок удален из состава команды" });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
   }

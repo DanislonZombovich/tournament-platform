@@ -36,6 +36,58 @@ export default function TeamsPage() {
   const [captainRole, setCaptainRole] = useState("pos1");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [updatingSlot, setUpdatingSlot] = useState(false);
+
+  const handleSlotChange = async (teamId: string, targetUserId: string, newRoleSlot: string) => {
+    setUpdatingSlot(true);
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target_user_id: targetUserId,
+          new_role_slot: newRoleSlot,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка смены позиции");
+
+      setActionMessage({ type: "success", text: data.message || "Позиция игрока успешно обновлена!" });
+      await loadData();
+      setTimeout(() => setActionMessage(null), 4000);
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message });
+      setTimeout(() => setActionMessage(null), 5000);
+    } finally {
+      setUpdatingSlot(false);
+    }
+  };
+
+  const handleKickMember = async (teamId: string, userId: string, username: string) => {
+    if (!confirm(`Вы действительно хотите исключить игрока ${username} из команды?`)) {
+      return;
+    }
+
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/teams/${teamId}?user_id=${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка исключения игрока");
+
+      setActionMessage({ type: "success", text: `Игрок ${username} исключен из состава.` });
+      await loadData();
+      setTimeout(() => setActionMessage(null), 4000);
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message });
+      setTimeout(() => setActionMessage(null), 5000);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -152,14 +204,121 @@ export default function TeamsPage() {
         </div>
       </div>
 
+      {actionMessage && (
+        <div
+          className={`p-3.5 rounded-xl border text-xs font-bold shadow-lg animate-fade-in ${
+            actionMessage.type === "success"
+              ? "bg-emerald-950/80 border-emerald-500/50 text-emerald-300"
+              : "bg-red-950/80 border-red-500/50 text-red-300"
+          }`}
+        >
+          {actionMessage.type === "success" ? "✓" : "⚠️"} {actionMessage.text}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {teams.map((team) => {
           const membersBySlot = new Map(team.members.map((m) => [m.role_slot, m]));
-          const required = ["pos1", "pos2", "pos3", "pos4", "pos5"];
-          const filledCount = required.filter((r) => membersBySlot.has(r)).length;
-          const steamCount = required.filter((r) => membersBySlot.get(r)?.steam_id).length;
-          const isEligible = filledCount === 5 && steamCount === 5;
+          const primarySlots = ["pos1", "pos2", "pos3", "pos4", "pos5"];
+          const reserveSlots = ["sub1", "sub2"];
+          const allSlots = [...primarySlots, ...reserveSlots];
+
+          const filledPrimary = primarySlots.filter((r) => membersBySlot.has(r)).length;
+          const steamPrimary = primarySlots.filter((r) => membersBySlot.get(r)?.steam_id).length;
+          const isEligible = filledPrimary === 5 && steamPrimary === 5;
+          const totalMembers = team.members.length;
+
+          const isCaptain = currentUser && currentUser.id === team.captain_id;
+          const isAdmin = currentUser && currentUser.role === "admin";
+          const canManage = isCaptain || isAdmin;
           const inviteUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/teams/join/${team.invite_code}`;
+
+          const renderSlotRow = (roleKey: string, isReserve = false) => {
+            const member = membersBySlot.get(roleKey);
+            const canEditThisMember = member && (canManage || currentUser?.id === member.user_id);
+            const canKickThisMember = member && canManage && member.user_id !== team.captain_id;
+
+            return (
+              <div
+                key={roleKey}
+                className={`flex items-center justify-between p-2 rounded-lg text-xs border ${
+                  member
+                    ? isReserve
+                      ? "bg-[#0b1426] border-cyan-900/40"
+                      : "bg-[#0d182e] border-blue-900/60"
+                    : "bg-black/20 border-dashed border-blue-900/40"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`font-semibold text-[11px] ${isReserve ? "text-cyan-400" : "text-slate-300"}`}>
+                    {roleLabels[roleKey]}
+                  </span>
+                  {isReserve && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 font-bold uppercase">
+                      Запас
+                    </span>
+                  )}
+                </div>
+
+                {member ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-white">{member.username}</span>
+                    {member.steam_id ? (
+                      <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/50 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                        Steam ✓
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-rose-400 font-bold bg-rose-950/50 px-1.5 py-0.2 rounded border border-rose-500/30">
+                        Нет Steam ✗
+                      </span>
+                    )}
+
+                    {/* Slot change dropdown */}
+                    {canEditThisMember && (
+                      <select
+                        value={roleKey}
+                        disabled={updatingSlot}
+                        onChange={(e) => handleSlotChange(team.id, member.user_id, e.target.value)}
+                        className="text-[10px] bg-[#070e1c] border border-blue-500/50 text-cyan-300 rounded px-1.5 py-0.5 font-bold cursor-pointer hover:border-cyan-400 focus:outline-none"
+                        title="Сменить слот / обменять местами"
+                      >
+                        {allSlots.map((s) => {
+                          const occ = membersBySlot.get(s);
+                          const isCur = s === roleKey;
+                          const label = isCur
+                            ? `${roleLabels[s]} (Текущая)`
+                            : occ
+                            ? `${roleLabels[s]} (Обмен с ${occ.username})`
+                            : `${roleLabels[s]} (Свободно)`;
+                          return (
+                            <option key={s} value={s} disabled={isCur}>
+                              {label}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    )}
+
+                    {/* Kick button */}
+                    {canKickThisMember && (
+                      <button
+                        type="button"
+                        onClick={() => handleKickMember(team.id, member.user_id, member.username)}
+                        className="text-[11px] text-red-400 hover:text-red-300 px-1 py-0.5 rounded hover:bg-red-950/60 font-bold transition"
+                        title="Исключить игрока из команды"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-[10px] font-bold text-cyan-400/80 italic">
+                    Свободный слот
+                  </span>
+                )}
+              </div>
+            );
+          };
 
           return (
             <div
@@ -198,57 +357,39 @@ export default function TeamsPage() {
                         : "bg-blue-950/80 text-cyan-300 border border-blue-500/40"
                     }`}
                   >
-                    {isEligible ? "Допущена к турниру" : `Состав: ${filledCount}/5`}
+                    {isEligible ? "Допущена к турниру" : `Основа: ${filledPrimary}/5`}
                   </span>
                   <span className="text-[10px] text-slate-400 mt-1">
-                    Steam: {steamCount}/5
+                    Игроков в ростере: {totalMembers}/7 (Steam: {steamPrimary}/5)
                   </span>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                  Позиции ростера:
-                </span>
+              <div className="space-y-3">
+                {/* Primary 5 Roles */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-slate-300">
+                      Основной состав (5 позиций):
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">Обязательно для турниров</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {primarySlots.map((roleKey) => renderSlotRow(roleKey, false))}
+                  </div>
+                </div>
 
-                <div className="grid grid-cols-1 gap-1.5">
-                  {required.map((roleKey) => {
-                    const member = membersBySlot.get(roleKey);
-
-                    return (
-                      <div
-                        key={roleKey}
-                        className={`flex items-center justify-between p-2 rounded-lg text-xs border ${
-                          member
-                            ? "bg-[#0d182e] border-blue-900/60"
-                            : "bg-black/20 border-dashed border-blue-900/40"
-                        }`}
-                      >
-                        <span className="text-slate-400 font-medium text-[11px]">
-                          {roleLabels[roleKey]}
-                        </span>
-
-                        {member ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-white">{member.username}</span>
-                            {member.steam_id ? (
-                              <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/50 px-1.5 py-0.2 rounded border border-emerald-500/30">
-                                Steam ✓
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-rose-400 font-bold bg-rose-950/50 px-1.5 py-0.2 rounded border border-rose-500/30">
-                                Нет Steam ✗
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-[10px] font-bold text-cyan-400/80 italic">
-                            Свободный слот
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
+                {/* Reserve 2 Roles */}
+                <div className="space-y-1.5 pt-2 border-t border-blue-950">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-cyan-400">
+                      Запасные игроки (до 2 слотов):
+                    </span>
+                    <span className="text-[10px] text-cyan-500/60 font-mono">Резерв состава</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {reserveSlots.map((roleKey) => renderSlotRow(roleKey, true))}
+                  </div>
                 </div>
               </div>
 
