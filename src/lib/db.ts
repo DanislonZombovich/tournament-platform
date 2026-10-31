@@ -53,8 +53,47 @@ export async function initDb() {
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prize_pool TEXT DEFAULT '$1,000,000';
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS banner_url TEXT;
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_id TEXT;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS is_fantasy_locked BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS is_predictions_locked BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS grand_final_format TEXT DEFAULT 'two_matches';
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS split_participants_losers BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS break_ties_placement BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS registration_type TEXT DEFAULT 'public_page';
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS entry_fee_type TEXT DEFAULT 'free';
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS teams_required BOOLEAN DEFAULT TRUE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS min_team_size INTEGER DEFAULT 5;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS max_team_size INTEGER DEFAULT 7;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS allow_incomplete_teams BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS participant_cap INTEGER DEFAULT 8;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS start_time TIMESTAMP WITH TIME ZONE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS start_time_tentative BOOLEAN DEFAULT TRUE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS open_voting_all BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS predictions_bracket BOOLEAN DEFAULT TRUE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS predict_lower_bracket BOOLEAN DEFAULT TRUE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prediction_scoring_type TEXT DEFAULT 'exponential';
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS allow_predictions_pre_tournament BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS exp_shareable_images BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS exp_require_verified_emails BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS exp_allow_specific_countries BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS exp_custom_prediction_fields BOOLEAN DEFAULT FALSE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS initial_rerolls INTEGER DEFAULT 20;
+
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_avatar TEXT;
+
+      ALTER TABLE fantasy_cards ADD COLUMN IF NOT EXISTS quality TEXT DEFAULT 'common';
+      ALTER TABLE fantasy_cards ADD COLUMN IF NOT EXISTS title TEXT DEFAULT 'Стальной';
+
+      CREATE TABLE IF NOT EXISTS tournament_user_tokens (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+        tokens INTEGER NOT NULL DEFAULT 20,
+        PRIMARY KEY (user_id, tournament_id)
+      );
+
       CREATE TABLE IF NOT EXISTS email_verifications (
         email TEXT PRIMARY KEY,
         code TEXT NOT NULL,

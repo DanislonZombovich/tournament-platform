@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users (
   steam_id TEXT UNIQUE,
   steam_name TEXT,
   steam_avatar TEXT,
+  discord_id TEXT UNIQUE,
+  discord_username TEXT,
+  discord_avatar TEXT,
   email_verified BOOLEAN DEFAULT FALSE,
   verification_code TEXT,
   fantasy_tokens INTEGER DEFAULT 20,
@@ -56,7 +59,36 @@ CREATE TABLE IF NOT EXISTS tournaments (
   status TEXT DEFAULT 'registration',
   is_fantasy_locked BOOLEAN DEFAULT FALSE,
   is_predictions_locked BOOLEAN DEFAULT FALSE,
+  grand_final_format TEXT DEFAULT 'two_matches',
+  split_participants_losers BOOLEAN DEFAULT FALSE,
+  break_ties_placement BOOLEAN DEFAULT FALSE,
+  registration_type TEXT DEFAULT 'public_page',
+  entry_fee_type TEXT DEFAULT 'free',
+  teams_required BOOLEAN DEFAULT TRUE,
+  min_team_size INTEGER DEFAULT 5,
+  max_team_size INTEGER DEFAULT 7,
+  allow_incomplete_teams BOOLEAN DEFAULT FALSE,
+  participant_cap INTEGER DEFAULT 8,
+  start_time TIMESTAMP WITH TIME ZONE,
+  start_time_tentative BOOLEAN DEFAULT TRUE,
+  open_voting_all BOOLEAN DEFAULT FALSE,
+  predictions_bracket BOOLEAN DEFAULT TRUE,
+  predict_lower_bracket BOOLEAN DEFAULT TRUE,
+  prediction_scoring_type TEXT DEFAULT 'exponential',
+  allow_predictions_pre_tournament BOOLEAN DEFAULT FALSE,
+  exp_shareable_images BOOLEAN DEFAULT FALSE,
+  exp_require_verified_emails BOOLEAN DEFAULT FALSE,
+  exp_allow_specific_countries BOOLEAN DEFAULT FALSE,
+  exp_custom_prediction_fields BOOLEAN DEFAULT FALSE,
+  initial_rerolls INTEGER DEFAULT 20,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS tournament_user_tokens (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
+  tokens INTEGER NOT NULL DEFAULT 20,
+  PRIMARY KEY (user_id, tournament_id)
 );
 
 CREATE TABLE IF NOT EXISTS tournament_teams (
@@ -111,6 +143,8 @@ CREATE TABLE IF NOT EXISTS fantasy_cards (
   tournament_id TEXT NOT NULL REFERENCES tournaments(id) ON DELETE CASCADE,
   role_slot TEXT NOT NULL,
   selected_player_id TEXT REFERENCES users(id),
+  quality TEXT DEFAULT 'common',
+  title TEXT DEFAULT 'Стальной',
   traits JSONB NOT NULL DEFAULT '[]',
   points_earned REAL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

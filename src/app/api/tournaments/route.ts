@@ -118,6 +118,14 @@ export async function POST(req: NextRequest) {
 
     // 1. Action: CREATE NEW TOURNAMENT
     if (body.action === "create" || (body.title && !body.team_id && !body.id && body.action !== "update" && body.action !== "edit")) {
+      // Restrict tournament creation strictly to admin / Danislon_Zombovich
+      if (user.role !== "admin" && user.id !== "usr_d98221e7ed837829") {
+        return NextResponse.json(
+          { error: "Только владелец платформы (Danislon_Zombovich) может создавать новые турниры" },
+          { status: 403 }
+        );
+      }
+
       const {
         title,
         description,
@@ -127,6 +135,28 @@ export async function POST(req: NextRequest) {
         access_code,
         prize_pool = "$50,000",
         banner_url = "/banner.jpg",
+        grand_final_format = "two_matches",
+        split_participants_losers = false,
+        break_ties_placement = false,
+        registration_type = "public_page",
+        entry_fee_type = "free",
+        teams_required = true,
+        min_team_size = 5,
+        max_team_size = 7,
+        allow_incomplete_teams = false,
+        participant_cap = 8,
+        start_time,
+        start_time_tentative = true,
+        open_voting_all = false,
+        predictions_bracket = true,
+        predict_lower_bracket = true,
+        prediction_scoring_type = "exponential",
+        allow_predictions_pre_tournament = false,
+        exp_shareable_images = false,
+        exp_require_verified_emails = false,
+        exp_allow_specific_countries = false,
+        exp_custom_prediction_fields = false,
+        initial_rerolls = 20,
       } = body;
 
       if (!title || typeof title !== "string" || title.trim().length < 3) {
@@ -136,12 +166,22 @@ export async function POST(req: NextRequest) {
       const tournamentId = "tourn_" + crypto.randomBytes(6).toString("hex");
       const cleanTitle = title.trim();
       const cleanDesc = description ? description.trim() : `Турнир по Dota 2: ${cleanTitle}`;
-      const numMaxTeams = Number(max_teams) || 8;
+      const numMaxTeams = Number(participant_cap || max_teams) || 8;
 
       await query(
         `INSERT INTO tournaments (
-          id, title, description, format, max_teams, is_public, access_code, prize_pool, banner_url, creator_id, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'registration')`,
+          id, title, description, format, max_teams, is_public, access_code, prize_pool, banner_url, creator_id, status,
+          grand_final_format, split_participants_losers, break_ties_placement, registration_type, entry_fee_type,
+          teams_required, min_team_size, max_team_size, allow_incomplete_teams, participant_cap,
+          start_time, start_time_tentative, open_voting_all, predictions_bracket, predict_lower_bracket,
+          prediction_scoring_type, allow_predictions_pre_tournament,
+          exp_shareable_images, exp_require_verified_emails, exp_allow_specific_countries, exp_custom_prediction_fields,
+          initial_rerolls
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'registration',
+          $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+          $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32
+        )`,
         [
           tournamentId,
           cleanTitle,
@@ -153,6 +193,28 @@ export async function POST(req: NextRequest) {
           prize_pool,
           banner_url,
           user.id,
+          grand_final_format,
+          Boolean(split_participants_losers),
+          Boolean(break_ties_placement),
+          registration_type,
+          entry_fee_type,
+          Boolean(teams_required),
+          Number(min_team_size) || 5,
+          Number(max_team_size) || 7,
+          Boolean(allow_incomplete_teams),
+          Number(participant_cap) || numMaxTeams,
+          start_time || null,
+          Boolean(start_time_tentative),
+          Boolean(open_voting_all),
+          Boolean(predictions_bracket),
+          Boolean(predict_lower_bracket),
+          prediction_scoring_type,
+          Boolean(allow_predictions_pre_tournament),
+          Boolean(exp_shareable_images),
+          Boolean(exp_require_verified_emails),
+          Boolean(exp_allow_specific_countries),
+          Boolean(exp_custom_prediction_fields),
+          Number(initial_rerolls) || 20,
         ]
       );
 
@@ -319,6 +381,28 @@ async function handleTournamentUpdate(user: any, body: any) {
     status,
     is_fantasy_locked,
     is_predictions_locked,
+    grand_final_format,
+    split_participants_losers,
+    break_ties_placement,
+    registration_type,
+    entry_fee_type,
+    teams_required,
+    min_team_size,
+    max_team_size,
+    allow_incomplete_teams,
+    participant_cap,
+    start_time,
+    start_time_tentative,
+    open_voting_all,
+    predictions_bracket,
+    predict_lower_bracket,
+    prediction_scoring_type,
+    allow_predictions_pre_tournament,
+    exp_shareable_images,
+    exp_require_verified_emails,
+    exp_allow_specific_countries,
+    exp_custom_prediction_fields,
+    initial_rerolls,
   } = body;
 
   if (!id) {
@@ -339,6 +423,28 @@ async function handleTournamentUpdate(user: any, body: any) {
     creator_id: string | null;
     is_fantasy_locked: boolean;
     is_predictions_locked: boolean;
+    grand_final_format: string;
+    split_participants_losers: boolean;
+    break_ties_placement: boolean;
+    registration_type: string;
+    entry_fee_type: string;
+    teams_required: boolean;
+    min_team_size: number;
+    max_team_size: number;
+    allow_incomplete_teams: boolean;
+    participant_cap: number;
+    start_time: string | null;
+    start_time_tentative: boolean;
+    open_voting_all: boolean;
+    predictions_bracket: boolean;
+    predict_lower_bracket: boolean;
+    prediction_scoring_type: string;
+    allow_predictions_pre_tournament: boolean;
+    exp_shareable_images: boolean;
+    exp_require_verified_emails: boolean;
+    exp_allow_specific_countries: boolean;
+    exp_custom_prediction_fields: boolean;
+    initial_rerolls: number;
   }>("SELECT * FROM tournaments WHERE id = $1", [id]);
 
   if (tournRes.rows.length === 0) {
@@ -347,11 +453,11 @@ async function handleTournamentUpdate(user: any, body: any) {
 
   const current = tournRes.rows[0];
   const isCreator = Boolean(current.creator_id && current.creator_id === user.id);
-  const isAdmin = user.role === "admin";
+  const isAdmin = user.role === "admin" || user.id === "usr_d98221e7ed837829";
 
   if (!isCreator && !isAdmin) {
     return NextResponse.json(
-      { error: "У вас нет прав на редактирование этого турнира (только создатель турнира или администратор)" },
+      { error: "У вас нет прав на редактирование этого турнира (только Danislon_Zombovich или администратор)" },
       { status: 403 }
     );
   }
@@ -363,7 +469,7 @@ async function handleTournamentUpdate(user: any, body: any) {
 
   const updatedDesc = description !== undefined ? (description ? description.trim() : "") : current.description;
   const updatedFormat = format || current.format;
-  const updatedMaxTeams = max_teams ? Number(max_teams) : current.max_teams;
+  const updatedCap = participant_cap !== undefined ? Number(participant_cap) : (max_teams ? Number(max_teams) : current.max_teams);
   const updatedPrize = prize_pool !== undefined ? prize_pool : current.prize_pool;
   const updatedBanner = banner_url !== undefined ? banner_url : current.banner_url;
   const updatedPublic = is_public !== undefined ? Boolean(is_public) : current.is_public;
@@ -371,6 +477,29 @@ async function handleTournamentUpdate(user: any, body: any) {
   const updatedStatus = status || current.status;
   const updatedFantasyLock = is_fantasy_locked !== undefined ? Boolean(is_fantasy_locked) : current.is_fantasy_locked;
   const updatedPredLock = is_predictions_locked !== undefined ? Boolean(is_predictions_locked) : current.is_predictions_locked;
+
+  // Challonge specific updates
+  const updatedGrandFinal = grand_final_format || current.grand_final_format || "two_matches";
+  const updatedSplitLosers = split_participants_losers !== undefined ? Boolean(split_participants_losers) : current.split_participants_losers;
+  const updatedBreakTies = break_ties_placement !== undefined ? Boolean(break_ties_placement) : current.break_ties_placement;
+  const updatedRegType = registration_type || current.registration_type || "public_page";
+  const updatedEntryFee = entry_fee_type || current.entry_fee_type || "free";
+  const updatedTeamsRequired = teams_required !== undefined ? Boolean(teams_required) : current.teams_required;
+  const updatedMinTeam = min_team_size !== undefined ? Number(min_team_size) : (current.min_team_size || 5);
+  const updatedMaxTeam = max_team_size !== undefined ? Number(max_team_size) : (current.max_team_size || 7);
+  const updatedAllowIncomplete = allow_incomplete_teams !== undefined ? Boolean(allow_incomplete_teams) : current.allow_incomplete_teams;
+  const updatedStartTime = start_time !== undefined ? (start_time || null) : current.start_time;
+  const updatedTimeTentative = start_time_tentative !== undefined ? Boolean(start_time_tentative) : current.start_time_tentative;
+  const updatedOpenVoting = open_voting_all !== undefined ? Boolean(open_voting_all) : current.open_voting_all;
+  const updatedPredBracket = predictions_bracket !== undefined ? Boolean(predictions_bracket) : current.predictions_bracket;
+  const updatedPredLower = predict_lower_bracket !== undefined ? Boolean(predict_lower_bracket) : current.predict_lower_bracket;
+  const updatedPredType = prediction_scoring_type || current.prediction_scoring_type || "exponential";
+  const updatedAllowPredPre = allow_predictions_pre_tournament !== undefined ? Boolean(allow_predictions_pre_tournament) : current.allow_predictions_pre_tournament;
+  const updatedExpImages = exp_shareable_images !== undefined ? Boolean(exp_shareable_images) : current.exp_shareable_images;
+  const updatedExpEmails = exp_require_verified_emails !== undefined ? Boolean(exp_require_verified_emails) : current.exp_require_verified_emails;
+  const updatedExpCountries = exp_allow_specific_countries !== undefined ? Boolean(exp_allow_specific_countries) : current.exp_allow_specific_countries;
+  const updatedExpFields = exp_custom_prediction_fields !== undefined ? Boolean(exp_custom_prediction_fields) : current.exp_custom_prediction_fields;
+  const updatedRerolls = initial_rerolls !== undefined ? Number(initial_rerolls) : (current.initial_rerolls || 20);
 
   await query(
     `UPDATE tournaments SET
@@ -384,13 +513,35 @@ async function handleTournamentUpdate(user: any, body: any) {
       access_code = $8,
       status = $9,
       is_fantasy_locked = $10,
-      is_predictions_locked = $11
-     WHERE id = $12`,
+      is_predictions_locked = $11,
+      grand_final_format = $12,
+      split_participants_losers = $13,
+      break_ties_placement = $14,
+      registration_type = $15,
+      entry_fee_type = $16,
+      teams_required = $17,
+      min_team_size = $18,
+      max_team_size = $19,
+      allow_incomplete_teams = $20,
+      participant_cap = $21,
+      start_time = $22,
+      start_time_tentative = $23,
+      open_voting_all = $24,
+      predictions_bracket = $25,
+      predict_lower_bracket = $26,
+      prediction_scoring_type = $27,
+      allow_predictions_pre_tournament = $28,
+      exp_shareable_images = $29,
+      exp_require_verified_emails = $30,
+      exp_allow_specific_countries = $31,
+      exp_custom_prediction_fields = $32,
+      initial_rerolls = $33
+     WHERE id = $34`,
     [
       updatedTitle,
       updatedDesc,
       updatedFormat,
-      updatedMaxTeams,
+      updatedCap,
       updatedPrize,
       updatedBanner,
       updatedPublic,
@@ -398,6 +549,28 @@ async function handleTournamentUpdate(user: any, body: any) {
       updatedStatus,
       updatedFantasyLock,
       updatedPredLock,
+      updatedGrandFinal,
+      updatedSplitLosers,
+      updatedBreakTies,
+      updatedRegType,
+      updatedEntryFee,
+      updatedTeamsRequired,
+      updatedMinTeam,
+      updatedMaxTeam,
+      updatedAllowIncomplete,
+      updatedCap,
+      updatedStartTime,
+      updatedTimeTentative,
+      updatedOpenVoting,
+      updatedPredBracket,
+      updatedPredLower,
+      updatedPredType,
+      updatedAllowPredPre,
+      updatedExpImages,
+      updatedExpEmails,
+      updatedExpCountries,
+      updatedExpFields,
+      updatedRerolls,
       id,
     ]
   );

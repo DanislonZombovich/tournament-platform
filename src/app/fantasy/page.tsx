@@ -2,7 +2,12 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { RolledTrait } from "@/lib/fantasy";
+import {
+  RolledTrait,
+  CardQuality,
+  CARD_QUALITIES,
+  CARD_TITLES,
+} from "@/lib/fantasy";
 
 interface FantasyPlayer {
   player_id: string;
@@ -20,6 +25,8 @@ interface FantasyCardData {
   id: string;
   role_slot: string;
   selected_player_id: string | null;
+  quality: CardQuality;
+  title: string;
   traits: RolledTrait[];
   points_earned: number;
   selected_player: FantasyPlayer | null;
@@ -46,6 +53,7 @@ function FantasyContent() {
   } | null>(null);
 
   const [activeModalRole, setActiveModalRole] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
@@ -108,6 +116,29 @@ function FantasyContent() {
     }
   };
 
+  const handleToggleLock = async (cardId: string, traitId: string) => {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/fantasy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "toggle_lock",
+          card_id: cardId,
+          trait_id: traitId,
+          tournament_id: currentTournId,
+        }),
+      });
+      const resJson = await res.json();
+      if (!res.ok) throw new Error(resJson.error || "Ошибка фиксации свойства");
+      await fetchFantasy(currentTournId);
+    } catch (err: any) {
+      setMessage({ text: err.message, type: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleReroll = async (cardId: string) => {
     setActionLoading(true);
     setMessage(null);
@@ -124,7 +155,7 @@ function FantasyContent() {
       const resJson = await res.json();
       if (!res.ok) throw new Error(resJson.error || "Ошибка перековки");
 
-      setMessage({ text: resJson.message || "Характеристики перекованы!", type: "success" });
+      setMessage({ text: resJson.message || "Характеристики карточки перекованы!", type: "success" });
       await fetchFantasy(currentTournId);
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
@@ -159,7 +190,7 @@ function FantasyContent() {
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-fade-in pb-12">
       {/* Tournament Selector & Switcher */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0a1324] border border-blue-900/50">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-2xl bg-[#0a1324] border border-blue-900/50 shadow-lg">
         <div className="flex items-center gap-3">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Фэнтези для турнира:</span>
           <select
@@ -176,10 +207,19 @@ function FantasyContent() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/70 border border-blue-500/40 text-xs font-bold text-cyan-300">
+          <button
+            onClick={() => setRulesOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-blue-950/50 hover:bg-blue-900/50 border border-cyan-500/30 text-cyan-300 text-xs font-bold transition flex items-center gap-1.5"
+          >
+            <span>📜</span>
+            <span>Правила и формулы очков</span>
+          </button>
+
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/60 border border-amber-500/40 text-xs font-bold text-amber-300 shadow-sm">
             <span>🪙</span>
-            <span>{tokens} жетонов перековки</span>
+            <span>{tokens} жетонов турнира</span>
           </div>
+
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-blue-900 text-xs font-bold text-white">
             <span>Всего очков:</span>
             <span className="font-mono text-cyan-400 text-sm">{Math.round(totalPoints * 100) / 100}</span>
@@ -197,16 +237,17 @@ function FantasyContent() {
         <div className="relative z-10 max-w-2xl space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-cyan-300 text-xs font-bold uppercase tracking-wider">
             <span>🏆</span>
-            <span>Официальная ролевая система Valve The International 2026</span>
+            <span>Официальная механика Компендиума Valve The International 2026</span>
           </div>
 
           <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-            ФЭНТЕЗИ ЛИГА <span className="cyber-blue-text">ИНДИВИДУАЛЬНЫХ РОЛЕЙ</span>
+            ФЭНТЕЗИ ЛИГА: <span className="cyber-blue-text">КРУТКА, ТИТУЛЫ & ЭМБЛЕМЫ</span>
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-            Соберите ростер из 5 игроков турнира по отдельным ролям: Керри, Мидер, Оффлейнер, Soft Support и Hard Support. 
-            Каждая карточка содержит 3 случайно выпавшие характеристики, дающие бонусный процент к реальной игровой статистике.
+            Соберите ростер из 5 игроков турнира по отдельным ролям. Крутите карточки за жетоны текущего турнира, 
+            фиксируйте лучшие показатели замком 🔒, повышайте качество карточки до Редкого, Эпического и Бессмертного, 
+            и выбивайте легендарные титулы Valve!
           </p>
         </div>
       </div>
@@ -229,20 +270,51 @@ function FantasyContent() {
           const card = cardMap.get(roleKey);
           const meta = roleTitles[roleKey];
           const player = card?.selected_player;
+          const qualityKey = (card?.quality || "common") as CardQuality;
+          const qualityCfg = CARD_QUALITIES[qualityKey] || CARD_QUALITIES.common;
+          const title = card?.title || "Стальной";
+          const titleCfg = CARD_TITLES.find((t) => t.name === title);
 
           return (
             <div
               key={roleKey}
-              className="rounded-2xl border border-blue-900/60 bg-[#091122] p-5 shadow-xl flex flex-col justify-between space-y-4 hover:border-cyan-400/50 transition-all duration-300 relative group"
+              className={`rounded-2xl border ${qualityCfg.borderClass} bg-[#091122] p-5 shadow-xl flex flex-col justify-between space-y-4 transition-all duration-300 relative group overflow-hidden`}
             >
-              <div className="text-center pb-3 border-b border-blue-900/60">
-                <span className="text-lg block mb-0.5">{meta.icon}</span>
-                <h3 className="text-base font-black tracking-wider text-white uppercase">{meta.title}</h3>
-                <span className="text-[10px] text-cyan-400 font-bold block">{meta.subtitle}</span>
+              {/* Quality Glow Banner */}
+              <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${qualityCfg.glowClass} to-transparent`}></div>
+
+              {/* Header with Title and Quality Badge */}
+              <div className="text-center pb-3 border-b border-blue-900/60 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${qualityCfg.badgeClass}`}>
+                    {qualityCfg.nameRu}
+                  </span>
+                  <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-blue-950/70 border border-blue-800 text-cyan-300">
+                    x{qualityCfg.bonusMultiplier}
+                  </span>
+                </div>
+
+                <div className="pt-1">
+                  <span className="text-lg block mb-0.5">{meta.icon}</span>
+                  <h3 className="text-base font-black tracking-wider text-white uppercase">{meta.title}</h3>
+                  <span className="text-[10px] text-cyan-400 font-bold block">{meta.subtitle}</span>
+                </div>
+
+                {/* Valve Title Badge */}
+                <div className="pt-1">
+                  <span className="inline-block px-2.5 py-0.5 rounded-md bg-gradient-to-r from-blue-900/60 to-cyan-900/40 border border-cyan-500/40 text-white font-extrabold text-[11px] tracking-wide">
+                    👑 Титул: «{title}»
+                  </span>
+                  {titleCfg && (
+                    <span className="block text-[9px] text-slate-400 mt-0.5 font-medium">
+                      {titleCfg.description}
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Player Avatar & Info */}
-              <div className="flex flex-col items-center text-center space-y-2 py-2">
+              <div className="flex flex-col items-center text-center space-y-2 py-1">
                 {player ? (
                   <>
                     <div className="relative">
@@ -287,25 +359,47 @@ function FantasyContent() {
                 )}
               </div>
 
-              {/* Traits List */}
+              {/* Traits List with Lock Buttons */}
               <div className="space-y-1.5 pt-2 border-t border-blue-900/60">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                  Характеристики карточки:
-                </span>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Характеристики карточки:
+                  </span>
+                  <span className="text-[9px] text-cyan-400 font-semibold">
+                    🔒 фиксация
+                  </span>
+                </div>
+
                 <div className="space-y-1">
-                  {(card?.traits || []).map((t, idx) => (
+                  {(card?.traits || []).map((t) => (
                     <div
-                      key={idx}
-                      className="flex items-center justify-between px-2 py-1 rounded bg-[#0d182e] border border-blue-900/50 text-[11px]"
+                      key={t.id}
+                      className={`flex items-center justify-between px-2 py-1 rounded border text-[11px] transition ${
+                        t.locked
+                          ? "bg-amber-950/40 border-amber-500/50 shadow-sm shadow-amber-500/10"
+                          : "bg-[#0d182e] border-blue-900/50"
+                      }`}
                     >
-                      <span className="text-slate-300 truncate max-w-[110px]">{t.label}</span>
+                      <button
+                        type="button"
+                        onClick={() => card?.id && handleToggleLock(card.id, t.id)}
+                        disabled={isLocked || actionLoading}
+                        title={t.locked ? "Свойство зафиксировано (не будет перекручено)" : "Зафиксировать свойство"}
+                        className={`text-xs mr-1.5 transition ${
+                          t.locked ? "text-amber-400 hover:text-amber-200" : "text-slate-500 hover:text-slate-300"
+                        }`}
+                      >
+                        {t.locked ? "🔒" : "🔓"}
+                      </button>
+
+                      <span className="text-slate-300 truncate max-w-[105px] flex-1">{t.label}</span>
                       <span className="font-mono font-bold text-cyan-300">+{t.bonus}%</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Buttons */}
+              {/* Buttons: Select Player & Reroll ("Крутить") */}
               <div className="pt-2 border-t border-blue-900/60 flex flex-col gap-2">
                 <button
                   onClick={() => setActiveModalRole(roleKey)}
@@ -319,10 +413,10 @@ function FantasyContent() {
                   <button
                     onClick={() => handleReroll(card.id)}
                     disabled={isLocked || tokens <= 0 || actionLoading}
-                    className="w-full py-1.5 px-2 rounded-lg bg-blue-950/60 hover:bg-blue-900/50 border border-blue-500/30 text-cyan-300 text-[11px] font-bold transition flex items-center justify-center gap-1 disabled:opacity-30"
+                    className="w-full py-2 px-2.5 rounded-xl bg-gradient-to-r from-amber-600/90 via-amber-500 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-black text-xs uppercase tracking-wider transition flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <span>🎲</span>
-                    <span>Перековать (1 жетон)</span>
+                    <span>Крутить (1 жетон)</span>
                   </button>
                 )}
               </div>
@@ -330,6 +424,74 @@ function FantasyContent() {
           );
         })}
       </div>
+
+      {/* Scoring Rules Modal */}
+      {rulesOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-2xl bg-[#091122] border border-cyan-500/40 rounded-2xl p-6 sm:p-7 shadow-2xl shadow-cyan-500/20 max-h-[85vh] overflow-y-auto space-y-4">
+            <button
+              onClick={() => setRulesOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition text-lg"
+            >
+              ✕
+            </button>
+
+            <div className="text-center pb-3 border-b border-blue-900/60">
+              <span className="text-3xl block mb-1">📜</span>
+              <h2 className="text-xl font-black text-white">Регламент и формулы очков Фэнтези Valve</h2>
+              <p className="text-xs text-slate-400 mt-1">
+                Официальные правила The International & расчёт battlepass.ru
+              </p>
+            </div>
+
+            <div className="space-y-4 text-xs text-slate-300">
+              <div className="p-3.5 rounded-xl bg-[#0d182e] border border-blue-900/50 space-y-2">
+                <span className="font-extrabold text-white text-sm block">1. Базовые очки за матч (карту):</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                  <div>⚔️ Убийства: <span className="font-mono text-cyan-300 font-bold">+1.21</span> / килл</div>
+                  <div>☠️ Смерти: <span className="font-mono text-cyan-300 font-bold">18.0 - 1.8</span> / смерть</div>
+                  <div>🌾 Добивания (CS): <span className="font-mono text-cyan-300 font-bold">+0.03</span> / крип</div>
+                  <div>💰 GPM: <span className="font-mono text-cyan-300 font-bold">x0.02</span></div>
+                  <div>🏰 Башни: <span className="font-mono text-cyan-300 font-bold">+3.40</span> / башня</div>
+                  <div>🐲 Рошан: <span className="font-mono text-cyan-300 font-bold">+8.50</span> / рошан</div>
+                  <div>👁️ Варды: <span className="font-mono text-cyan-300 font-bold">+1.13</span> / вард</div>
+                  <div>⚡ Оглушения: <span className="font-mono text-cyan-300 font-bold">+0.15</span> / сек</div>
+                  <div>🩸 First Blood: <span className="font-mono text-cyan-300 font-bold">+17.00</span></div>
+                  <div>🤝 Ассисты: <span className="font-mono text-cyan-300 font-bold">+0.60</span> / ассист</div>
+                  <div>💥 Teamfight: <span className="font-mono text-cyan-300 font-bold">до 18.95</span></div>
+                  <div>🌀 Руны: <span className="font-mono text-cyan-300 font-bold">+1.21</span> / руна</div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#0d182e] border border-blue-900/50 space-y-2">
+                <span className="font-extrabold text-white text-sm block">2. Качества карточек (Эмблемы):</span>
+                <div className="space-y-1.5 text-[11px]">
+                  <div>🥉 <span className="font-bold text-stone-300">Обычный (Common)</span>: Базовый множитель x1.0, статы 10% - 20%</div>
+                  <div>🥈 <span className="font-bold text-sky-400">Редкий (Rare / Серебро)</span>: Множитель x1.1 (+10% очков), статы 15% - 35%</div>
+                  <div>🥇 <span className="font-bold text-amber-400">Эпический (Epic / Золото)</span>: Множитель x1.25 (+25% очков), статы 25% - 50%</div>
+                  <div>💎 <span className="font-bold text-emerald-400">Бессмертный (Immortal)</span>: Множитель x1.40 (+40% очков), статы 40% - 75%</div>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-[#0d182e] border border-blue-900/50 space-y-2">
+                <span className="font-extrabold text-white text-sm block">3. Механика крутки и жетоны перековки:</span>
+                <p className="leading-relaxed">
+                  Жетоны перековки привязаны к конкретному турниру. При нажатии «Крутить» вы тратите 1 жетон турнира.
+                  Зафиксированные замочком 🔒 свойства сохраняются, а остальные перекручиваются со свежими процентами бонуса.
+                  Также есть шанс повысить качество эмблемы и получить новый титул!
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setRulesOpen(false)}
+              className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs uppercase transition"
+            >
+              Понятно, закрыть
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Player Selection Modal */}
       {activeModalRole && (
@@ -399,12 +561,15 @@ function FantasyContent() {
               )}
             </div>
 
-            <button
-              onClick={() => handleSelectPlayer(activeModalRole, null)}
-              className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
-            >
-              Снять игрока со слота
-            </button>
+            {cardMap.get(activeModalRole)?.selected_player_id && (
+              <button
+                onClick={() => handleSelectPlayer(activeModalRole, null)}
+                disabled={actionLoading}
+                className="w-full py-2 rounded-xl bg-red-950/50 hover:bg-red-900/60 border border-red-500/40 text-red-300 text-xs font-bold transition"
+              >
+                Снять игрока со слота
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -417,7 +582,7 @@ export default function FantasyPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="w-12 h-12 rounded-full border-4 border-blue-500/20 border-t-cyan-400 animate-spin"></div>
+          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-cyan-400 rounded-full animate-spin"></div>
         </div>
       }
     >

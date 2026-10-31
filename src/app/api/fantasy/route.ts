@@ -2,7 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { query } from "@/lib/db";
-import { rollRandomTraits, RolledTrait } from "@/lib/fantasy";
+import {
+  rollRandomTraits,
+  RolledTrait,
+  getRandomQuality,
+  getRandomTitle,
+  CardQuality,
+  CARD_QUALITIES,
+  CARD_TITLES,
+} from "@/lib/fantasy";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,8 +23,10 @@ export async function GET(req: NextRequest) {
       title: string;
       status: string;
       is_fantasy_locked: boolean;
+      initial_rerolls: number;
     }>(
-      `SELECT id, title, status, is_fantasy_locked FROM tournaments WHERE id = $1`,
+      `SELECT id, title, status, is_fantasy_locked, COALESCE(initial_rerolls, 20) AS initial_rerolls
+       FROM tournaments WHERE id = $1`,
       [tournamentId]
     );
 
@@ -75,17 +85,35 @@ export async function GET(req: NextRequest) {
     }
 
     let cardsWithDetails: any[] = [];
-    let tokens = 20;
+    let tokens = tournament.initial_rerolls || 20;
 
     const slots = ["pos1", "pos2", "pos3", "pos4", "pos5"];
 
     if (user) {
-      tokens = user.fantasy_tokens ?? 20;
+      // Get or initialize per-tournament tokens for user
+      const userTokensRes = await query<{ tokens: number }>(
+        `SELECT tokens FROM tournament_user_tokens WHERE user_id = $1 AND tournament_id = $2`,
+        [user.id, tournamentId]
+      );
+
+      if (userTokensRes.rows.length === 0) {
+        tokens = tournament.initial_rerolls || 20;
+        await query(
+          `INSERT INTO tournament_user_tokens (user_id, tournament_id, tokens)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (user_id, tournament_id) DO NOTHING`,
+          [user.id, tournamentId, tokens]
+        );
+      } else {
+        tokens = userTokensRes.rows[0].tokens;
+      }
 
       const userCardsRes = await query<{
         id: string;
         role_slot: string;
         selected_player_id: string | null;
+        quality: CardQuality;
+        title: string;
         traits: string;
         points_earned: number;
         player_username: string | null;
@@ -97,7 +125,10 @@ export async function GET(req: NextRequest) {
         team_tag: string | null;
         team_logo: string | null;
       }>(
-        `SELECT fc.id, fc.role_slot, fc.selected_player_id, fc.traits, fc.points_earned,
+        `SELECT fc.id, fc.role_slot, fc.selected_player_id,
+                COALESCE(fc.quality, 'common') AS quality,
+                COALESCE(fc.title, 'Стальной') AS title,
+                fc.traits, fc.points_earned,
                 u.username AS player_username, u.steam_id AS player_steam_id,
                 u.steam_name AS player_steam_name, u.steam_avatar AS player_steam_avatar,
                 t.id AS team_id, t.name AS team_name, t.tag AS team_tag, t.logo_url AS team_logo
@@ -116,19 +147,23 @@ export async function GET(req: NextRequest) {
 
         if (!card) {
           const cardId = "fc_" + crypto.randomBytes(8).toString("hex");
-          const initialTraits = rollRandomTraits(3);
+          const initQuality = getRandomQuality();
+          const initTitle = getRandomTitle();
+          const initialTraits = rollRandomTraits(3, initQuality);
 
           await query(
-            `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, traits, points_earned)
-             VALUES ($1, $2, $3, $4, NULL, $5, 0)
+            `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, quality, title, traits, points_earned)
+             VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, 0)
              ON CONFLICT (user_id, tournament_id, role_slot) DO NOTHING`,
-            [cardId, user.id, tournamentId, slot, JSON.stringify(initialTraits)]
+            [cardId, user.id, tournamentId, slot, initQuality, initTitle, JSON.stringify(initialTraits)]
           );
 
           card = {
             id: cardId,
             role_slot: slot,
             selected_player_id: null,
+            quality: initQuality,
+            title: initTitle,
             traits: JSON.stringify(initialTraits),
             points_earned: 0,
             player_username: null,
@@ -146,13 +181,15 @@ export async function GET(req: NextRequest) {
         try {
           parsedTraits = typeof card.traits === "string" ? JSON.parse(card.traits) : card.traits;
         } catch {
-          parsedTraits = rollRandomTraits(3);
+          parsedTraits = rollRandomTraits(3, card.quality || "common");
         }
 
         cardsWithDetails.push({
           id: card.id,
           role_slot: slot,
           selected_player_id: card.selected_player_id,
+          quality: card.quality || "common",
+          title: card.title || "Стальной",
           traits: parsedTraits,
           points_earned: card.points_earned || 0,
           selected_player: card.selected_player_id
@@ -176,7 +213,9 @@ export async function GET(req: NextRequest) {
           id: "preview_" + slot,
           role_slot: slot,
           selected_player_id: null,
-          traits: rollRandomTraits(3),
+          quality: "common",
+          title: "Стальной",
+          traits: rollRandomTraits(3, "common"),
           points_earned: 0,
           selected_player: null,
         });
@@ -202,10 +241,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
     }
 
-    const { action, role_slot, player_id, card_id, tournament_id = "ti-2026-main" } = await req.json();
+    const body = await req.json();
+    const { action, role_slot, player_id, card_id, trait_id, tournament_id = "ti-2026-main" } = body;
 
-    const tournamentRes = await query<{ id: string; is_fantasy_locked: boolean }>(
-      `SELECT id, is_fantasy_locked FROM tournaments WHERE id = $1`,
+    const tournamentRes = await query<{ id: string; is_fantasy_locked: boolean; initial_rerolls: number }>(
+      `SELECT id, is_fantasy_locked, COALESCE(initial_rerolls, 20) AS initial_rerolls FROM tournaments WHERE id = $1`,
       [tournament_id]
     );
 
@@ -220,6 +260,7 @@ export async function POST(req: NextRequest) {
 
     const validRoles = ["pos1", "pos2", "pos3", "pos4", "pos5"];
 
+    // 1. SELECT PLAYER
     if (action === "select_player") {
       if (!validRoles.includes(role_slot)) {
         return NextResponse.json({ error: "Неверный слот роли" }, { status: 400 });
@@ -248,18 +289,20 @@ export async function POST(req: NextRequest) {
         }, { status: 400 });
       }
 
-      const cardRes = await query(
+      const cardRes = await query<{ id: string }>(
         `SELECT id FROM fantasy_cards WHERE user_id = $1 AND tournament_id = $2 AND role_slot = $3`,
         [user.id, tournament_id, role_slot]
       );
 
       if (cardRes.rows.length === 0) {
         const cardId = "fc_" + crypto.randomBytes(8).toString("hex");
-        const initialTraits = rollRandomTraits(3);
+        const initQuality = getRandomQuality();
+        const initTitle = getRandomTitle();
+        const initialTraits = rollRandomTraits(3, initQuality);
         await query(
-          `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, traits)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [cardId, user.id, tournament_id, role_slot, player_id, JSON.stringify(initialTraits)]
+          `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, quality, title, traits)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [cardId, user.id, tournament_id, role_slot, player_id, initQuality, initTitle, JSON.stringify(initialTraits)]
         );
       } else {
         await query(
@@ -272,23 +315,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, message: "Игрок назначен в фэнтези-ростер!" });
     }
 
-    if (action === "reroll_traits") {
-      if (!card_id) {
-        return NextResponse.json({ error: "Не указан ID карточки" }, { status: 400 });
+    // 2. TOGGLE LOCK ON A SPECIFIC TRAIT
+    if (action === "toggle_lock") {
+      if (!card_id || !trait_id) {
+        return NextResponse.json({ error: "Не указаны параметры карточки или свойства" }, { status: 400 });
       }
 
-      const userRes = await query<{ fantasy_tokens: number }>(
-        `SELECT fantasy_tokens FROM users WHERE id = $1`,
-        [user.id]
-      );
-
-      const tokens = userRes.rows[0]?.fantasy_tokens ?? 0;
-      if (tokens <= 0) {
-        return NextResponse.json({ error: "У вас закончились жетоны для перековки" }, { status: 400 });
-      }
-
-      const cardRes = await query<{ id: string }>(
-        `SELECT id FROM fantasy_cards WHERE id = $1 AND user_id = $2`,
+      const cardRes = await query<{ id: string; traits: string }>(
+        `SELECT id, traits FROM fantasy_cards WHERE id = $1 AND user_id = $2`,
         [card_id, user.id]
       );
 
@@ -296,22 +330,113 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Карточка не найдена" }, { status: 404 });
       }
 
-      const newTraits = rollRandomTraits(3);
+      let traits: RolledTrait[] = [];
+      try {
+        traits = typeof cardRes.rows[0].traits === "string" ? JSON.parse(cardRes.rows[0].traits) : cardRes.rows[0].traits;
+      } catch {
+        traits = [];
+      }
 
-      await query(
-        `UPDATE fantasy_cards SET traits = $1 WHERE id = $2`,
-        [JSON.stringify(newTraits), card_id]
+      traits = traits.map((t) => {
+        if (t.id === trait_id) {
+          return { ...t, locked: !t.locked };
+        }
+        return t;
+      });
+
+      await query(`UPDATE fantasy_cards SET traits = $1 WHERE id = $2`, [JSON.stringify(traits), card_id]);
+
+      return NextResponse.json({
+        success: true,
+        traits,
+        message: "Фиксация свойства обновлена",
+      });
+    }
+
+    // 3. REROLL TRAITS ("КРУТИТЬ ХАРАКТЕРИСТИКИ")
+    if (action === "reroll_traits") {
+      if (!card_id) {
+        return NextResponse.json({ error: "Не указан ID карточки" }, { status: 400 });
+      }
+
+      // Read tournament-specific tokens for the user
+      const tokensRes = await query<{ tokens: number }>(
+        `SELECT tokens FROM tournament_user_tokens WHERE user_id = $1 AND tournament_id = $2`,
+        [user.id, tournament_id]
       );
 
+      let currentTokens = tokensRes.rows.length > 0 ? tokensRes.rows[0].tokens : (tournament.initial_rerolls || 20);
+
+      if (currentTokens <= 0) {
+        return NextResponse.json({
+          error: "У вас закончились жетоны перековки для этого турнира",
+        }, { status: 400 });
+      }
+
+      const cardRes = await query<{
+        id: string;
+        quality: CardQuality;
+        title: string;
+        traits: string;
+      }>(
+        `SELECT id, COALESCE(quality, 'common') AS quality, COALESCE(title, 'Стальной') AS title, traits
+         FROM fantasy_cards WHERE id = $1 AND user_id = $2`,
+        [card_id, user.id]
+      );
+
+      if (cardRes.rows.length === 0) {
+        return NextResponse.json({ error: "Карточка не найдена" }, { status: 404 });
+      }
+
+      const card = cardRes.rows[0];
+      let existingTraits: RolledTrait[] = [];
+      try {
+        existingTraits = typeof card.traits === "string" ? JSON.parse(card.traits) : card.traits;
+      } catch {
+        existingTraits = [];
+      }
+
+      // Small chance to upgrade quality on reroll (15% chance to roll upgraded quality)
+      let currentQuality = card.quality;
+      if (Math.random() < 0.15) {
+        const qualityProgression: Record<CardQuality, CardQuality> = {
+          common: "rare",
+          rare: "epic",
+          epic: "immortal",
+          immortal: "immortal",
+        };
+        currentQuality = qualityProgression[currentQuality] || currentQuality;
+      }
+
+      // Chance to reroll title if not locked (30% chance for new title)
+      let currentTitle = card.title;
+      if (Math.random() < 0.30) {
+        currentTitle = getRandomTitle();
+      }
+
+      const newTraits = rollRandomTraits(3, currentQuality, existingTraits);
+
       await query(
-        `UPDATE users SET fantasy_tokens = fantasy_tokens - 1 WHERE id = $1`,
-        [user.id]
+        `UPDATE fantasy_cards SET traits = $1, quality = $2, title = $3 WHERE id = $4`,
+        [JSON.stringify(newTraits), currentQuality, currentTitle, card_id]
+      );
+
+      // Decrement tournament tokens
+      const remainingTokens = currentTokens - 1;
+      await query(
+        `INSERT INTO tournament_user_tokens (user_id, tournament_id, tokens)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, tournament_id)
+         DO UPDATE SET tokens = $3`,
+        [user.id, tournament_id, remainingTokens]
       );
 
       return NextResponse.json({
         success: true,
         traits: newTraits,
-        remaining_tokens: tokens - 1,
+        quality: currentQuality,
+        title: currentTitle,
+        remaining_tokens: remainingTokens,
         message: "Характеристики карточки успешно перекованы!",
       });
     }

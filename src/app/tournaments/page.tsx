@@ -19,6 +19,29 @@ interface TournamentItem {
   is_predictions_locked: boolean;
   teams_count: string;
   created_at: string;
+  // Challonge options
+  grand_final_format?: string;
+  split_participants_losers?: boolean;
+  break_ties_placement?: boolean;
+  registration_type?: string;
+  entry_fee_type?: string;
+  teams_required?: boolean;
+  min_team_size?: number;
+  max_team_size?: number;
+  allow_incomplete_teams?: boolean;
+  participant_cap?: number;
+  start_time?: string | null;
+  start_time_tentative?: boolean;
+  open_voting_all?: boolean;
+  predictions_bracket?: boolean;
+  predict_lower_bracket?: boolean;
+  prediction_scoring_type?: string;
+  allow_predictions_pre_tournament?: boolean;
+  exp_shareable_images?: boolean;
+  exp_require_verified_emails?: boolean;
+  exp_allow_specific_countries?: boolean;
+  exp_custom_prediction_fields?: boolean;
+  initial_rerolls?: number;
 }
 
 export default function TournamentsPage() {
@@ -43,7 +66,7 @@ export default function TournamentsPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  // Edit / Settings Modal
+  // Edit / Settings Modal (Challonge-style)
   const [editTourn, setEditTourn] = useState<TournamentItem | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -56,6 +79,31 @@ export default function TournamentsPage() {
   const [editBannerUrl, setEditBannerUrl] = useState("/banner.jpg");
   const [editFantasyLocked, setEditFantasyLocked] = useState(false);
   const [editPredictionsLocked, setEditPredictionsLocked] = useState(false);
+
+  // Challonge specific state
+  const [editGrandFinal, setEditGrandFinal] = useState("two_matches");
+  const [editSplitLosers, setEditSplitLosers] = useState(false);
+  const [editBreakTies, setEditBreakTies] = useState(false);
+  const [editRegType, setEditRegType] = useState("public_page");
+  const [editEntryFee, setEditEntryFee] = useState("free");
+  const [editTeamsRequired, setEditTeamsRequired] = useState(true);
+  const [editMinTeam, setEditMinTeam] = useState(5);
+  const [editMaxTeam, setEditMaxTeam] = useState(7);
+  const [editAllowIncomplete, setEditAllowIncomplete] = useState(false);
+  const [editParticipantCap, setEditParticipantCap] = useState(8);
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editTimeTentative, setEditTimeTentative] = useState(true);
+  const [editOpenVoting, setEditOpenVoting] = useState(false);
+  const [editPredBracket, setEditPredBracket] = useState(true);
+  const [editPredLower, setEditPredLower] = useState(true);
+  const [editPredScoring, setEditPredScoring] = useState("exponential");
+  const [editAllowPredPre, setEditAllowPredPre] = useState(false);
+  const [editExpImages, setEditExpImages] = useState(false);
+  const [editExpEmails, setEditExpEmails] = useState(false);
+  const [editExpCountries, setEditExpCountries] = useState(false);
+  const [editExpFields, setEditExpFields] = useState(false);
+  const [editInitialRerolls, setEditInitialRerolls] = useState(20);
+
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
@@ -71,6 +119,8 @@ export default function TournamentsPage() {
 
   // Auth modal fallback
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  const isAdmin = Boolean(user && (user.role === "admin" || user.id === "usr_d98221e7ed837829"));
 
   const loadData = async () => {
     try {
@@ -88,7 +138,6 @@ export default function TournamentsPage() {
       setUser(authJson.user || null);
 
       if (teamsJson.teams && authJson.user) {
-        // Teams where current user is captain
         const captainTeams = teamsJson.teams.filter(
           (t: any) => t.captain_id === authJson.user.id
         );
@@ -121,6 +170,31 @@ export default function TournamentsPage() {
     setEditBannerUrl(t.banner_url || "/banner.jpg");
     setEditFantasyLocked(Boolean(t.is_fantasy_locked));
     setEditPredictionsLocked(Boolean(t.is_predictions_locked));
+
+    // Challonge fields
+    setEditGrandFinal(t.grand_final_format || "two_matches");
+    setEditSplitLosers(Boolean(t.split_participants_losers));
+    setEditBreakTies(Boolean(t.break_ties_placement));
+    setEditRegType(t.registration_type || "public_page");
+    setEditEntryFee(t.entry_fee_type || "free");
+    setEditTeamsRequired(t.teams_required !== false);
+    setEditMinTeam(t.min_team_size || 5);
+    setEditMaxTeam(t.max_team_size || 7);
+    setEditAllowIncomplete(Boolean(t.allow_incomplete_teams));
+    setEditParticipantCap(t.participant_cap || t.max_teams || 8);
+    setEditStartTime(t.start_time ? t.start_time.slice(0, 16) : "");
+    setEditTimeTentative(t.start_time_tentative !== false);
+    setEditOpenVoting(Boolean(t.open_voting_all));
+    setEditPredBracket(t.predictions_bracket !== false);
+    setEditPredLower(t.predict_lower_bracket !== false);
+    setEditPredScoring(t.prediction_scoring_type || "exponential");
+    setEditAllowPredPre(Boolean(t.allow_predictions_pre_tournament));
+    setEditExpImages(Boolean(t.exp_shareable_images));
+    setEditExpEmails(Boolean(t.exp_require_verified_emails));
+    setEditExpCountries(Boolean(t.exp_allow_specific_countries));
+    setEditExpFields(Boolean(t.exp_custom_prediction_fields));
+    setEditInitialRerolls(t.initial_rerolls || 20);
+
     setEditError(null);
     setEditSuccess(null);
     setIsDeleting(false);
@@ -164,6 +238,29 @@ export default function TournamentsPage() {
           status: editStatus,
           is_fantasy_locked: editFantasyLocked,
           is_predictions_locked: editPredictionsLocked,
+          // Challonge fields
+          grand_final_format: editGrandFinal,
+          split_participants_losers: editSplitLosers,
+          break_ties_placement: editBreakTies,
+          registration_type: editRegType,
+          entry_fee_type: editEntryFee,
+          teams_required: editTeamsRequired,
+          min_team_size: editMinTeam,
+          max_team_size: editMaxTeam,
+          allow_incomplete_teams: editAllowIncomplete,
+          participant_cap: editParticipantCap,
+          start_time: editStartTime || null,
+          start_time_tentative: editTimeTentative,
+          open_voting_all: editOpenVoting,
+          predictions_bracket: editPredBracket,
+          predict_lower_bracket: editPredLower,
+          prediction_scoring_type: editPredScoring,
+          allow_predictions_pre_tournament: editAllowPredPre,
+          exp_shareable_images: editExpImages,
+          exp_require_verified_emails: editExpEmails,
+          exp_allow_specific_countries: editExpCountries,
+          exp_custom_prediction_fields: editExpFields,
+          initial_rerolls: editInitialRerolls,
         }),
       });
 
@@ -175,7 +272,7 @@ export default function TournamentsPage() {
       setTimeout(() => {
         setEditTourn(null);
         setEditSuccess(null);
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
       setEditError(err.message);
     } finally {
@@ -262,21 +359,20 @@ export default function TournamentsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "register_team",
           tournament_id: registerTourn.id,
           team_id: selectedTeamId,
-          access_code: regAccessCode,
+          access_code: regAccessCode || undefined,
         }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка регистрации");
+      if (!res.ok) throw new Error(data.error || "Ошибка при регистрации команды");
 
       setRegSuccess(data.message || "Команда успешно зарегистрирована!");
-      setTimeout(async () => {
+      await loadData();
+      setTimeout(() => {
         setRegisterTourn(null);
         setRegSuccess(null);
-        await loadData();
       }, 1500);
     } catch (err: any) {
       setRegError(err.message);
@@ -286,15 +382,12 @@ export default function TournamentsPage() {
   };
 
   const filteredTournaments = tournaments.filter((t) => {
-    if (filterStatus === "registration" && t.status !== "registration") return false;
-    if (filterStatus === "ongoing" && t.status !== "ongoing") return false;
-    if (filterStatus === "completed" && t.status !== "completed") return false;
-    if (searchQuery.trim()) {
+    if (filterStatus !== "all" && t.status !== filterStatus) return false;
+    if (searchQuery.trim() !== "") {
       const q = searchQuery.toLowerCase();
-      return (
-        t.title.toLowerCase().includes(q) ||
-        (t.description && t.description.toLowerCase().includes(q))
-      );
+      const matchTitle = t.title.toLowerCase().includes(q);
+      const matchDesc = (t.description || "").toLowerCase().includes(q);
+      return matchTitle || matchDesc;
     }
     return true;
   });
@@ -328,25 +421,24 @@ export default function TournamentsPage() {
           </h1>
 
           <p className="text-sm text-slate-300 leading-relaxed">
-            Создавайте собственные турниры по Dota 2 с настраиваемыми сетками и правилами, 
-            регистрируйте команды с обязательной верификацией игроков через Steam и участвуйте в официальном 
-            фэнтези-компендиуме Valve.
+            Платформа Danislon Tournaments с официальными правилами сетки Challonge и фэнтези-лигой Valve Compendium The International 2026.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
-            <button
-              onClick={() => {
-                if (!user) {
-                  setIsAuthOpen(true);
-                } else {
-                  setIsCreateOpen(true);
-                }
-              }}
-              className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
-            >
-              <span>➕</span>
-              <span>Создать турнир</span>
-            </button>
+            {isAdmin ? (
+              <button
+                onClick={() => setIsCreateOpen(true)}
+                className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 transition flex items-center gap-2"
+              >
+                <span>➕</span>
+                <span>Создать турнир</span>
+              </button>
+            ) : (
+              <div className="px-4 py-2.5 rounded-xl bg-blue-950/40 border border-blue-900/60 text-xs text-slate-400 flex items-center gap-2">
+                <span>🛡️</span>
+                <span>Создание турниров доступно только владельцу платформы</span>
+              </div>
+            )}
 
             <a
               href="/"
@@ -399,7 +491,8 @@ export default function TournamentsPage() {
         {filteredTournaments.map((t) => {
           const isFeatured = t.id === "ti-2026-main";
           const currentCount = parseInt(t.teams_count || "0", 10);
-          const maxCount = t.max_teams || 8;
+          const maxCount = t.participant_cap || t.max_teams || 8;
+          const canManage = isAdmin || Boolean(user && t.creator_id === user.id);
 
           return (
             <div
@@ -442,7 +535,7 @@ export default function TournamentsPage() {
                   </span>
                 </div>
 
-                <div className="absolute top-3 right-3">
+                <div className="absolute top-3 right-3 flex items-center gap-1">
                   <span className="px-2 py-0.5 rounded-md bg-black/60 border border-slate-700 text-slate-300 text-[10px] font-semibold">
                     {t.is_public ? "Публичный" : "🔒 Приватный"}
                   </span>
@@ -465,7 +558,7 @@ export default function TournamentsPage() {
                     {t.title}
                   </h3>
                   <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                    {t.description || "Полноценный турнир по Dota 2 с динамической сеткой и фэнтези-лигой."}
+                    {t.description || "Полноценный турнир по Dota 2 с сеткой Challonge и фэнтези-лигой Valve."}
                   </p>
                 </div>
 
@@ -494,11 +587,11 @@ export default function TournamentsPage() {
                     </button>
                   )}
 
-                  {user && (user.role === "admin" || user.id === t.creator_id) && (
+                  {canManage && (
                     <button
                       onClick={() => openEditModal(t)}
                       className="py-2 px-2.5 rounded-lg bg-[#0e1d3d] hover:bg-blue-900/60 border border-cyan-500/40 text-cyan-300 hover:text-white font-extrabold text-xs transition flex items-center gap-1 shadow-sm"
-                      title="Настройки турнира"
+                      title="Настройки турнира Challonge"
                     >
                       <span>⚙️</span>
                       <span className="hidden sm:inline">Настройки</span>
@@ -515,12 +608,12 @@ export default function TournamentsPage() {
         <div className="p-12 text-center rounded-2xl bg-[#091122] border border-blue-900/40 space-y-3">
           <span className="text-4xl">🏆</span>
           <h3 className="text-lg font-bold text-white">Турниры не найдены</h3>
-          <p className="text-xs text-slate-400">Попробуйте изменить поисковый запрос или создайте новый турнир.</p>
+          <p className="text-xs text-slate-400">Попробуйте изменить поисковый запрос.</p>
         </div>
       )}
 
-      {/* CREATE TOURNAMENT MODAL */}
-      {isCreateOpen && (
+      {/* CREATE TOURNAMENT MODAL (Admin only) */}
+      {isCreateOpen && isAdmin && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
           <div className="relative w-full max-w-lg bg-[#091122] border border-blue-500/40 rounded-2xl p-6 sm:p-7 shadow-2xl shadow-blue-500/20 max-h-[90vh] overflow-y-auto">
             <button
@@ -536,7 +629,7 @@ export default function TournamentsPage() {
               </div>
               <h2 className="text-xl font-black text-white">Создание турнира по Dota 2</h2>
               <p className="text-xs text-slate-400 mt-1">
-                Настройте параметры чемпионата. Сетка и матчи сгенерируются автоматически.
+                Панель администратора Danislon Tournaments. Сетка генерируется автоматически.
               </p>
             </div>
 
@@ -556,7 +649,7 @@ export default function TournamentsPage() {
                   required
                   value={createTitle}
                   onChange={(e) => setCreateTitle(e.target.value)}
-                  placeholder="Например: Cyber Dota 2 Spring Cup 2026"
+                  placeholder="Например: Danislon Masters Season 1"
                   className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
                 />
               </div>
@@ -569,7 +662,7 @@ export default function TournamentsPage() {
                   rows={2}
                   value={createDesc}
                   onChange={(e) => setCreateDesc(e.target.value)}
-                  placeholder="Регламент, серверы, призовые места..."
+                  placeholder="Регламент, правила, серверы..."
                   className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
                 />
               </div>
@@ -584,23 +677,25 @@ export default function TournamentsPage() {
                     onChange={(e) => setCreateFormat(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
                   >
-                    <option value="double_elimination">Double Elimination (Сетка лузеров)</option>
-                    <option value="single_elimination">Single Elimination (На выбывание)</option>
+                    <option value="double_elimination">Double Elimination</option>
+                    <option value="single_elimination">Single Elimination</option>
+                    <option value="round_robin">Round Robin</option>
+                    <option value="swiss">Swiss</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Количество команд
+                    Лимит команд
                   </label>
                   <select
                     value={createMaxTeams}
                     onChange={(e) => setCreateMaxTeams(Number(e.target.value))}
                     className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
                   >
-                    <option value={4}>4 команды (Мини-сетка)</option>
-                    <option value={8}>8 команд (Стандарт)</option>
-                    <option value={16}>16 команд (Мажор)</option>
+                    <option value={4}>4 команды</option>
+                    <option value={8}>8 команд</option>
+                    <option value={16}>16 команд</option>
                   </select>
                 </div>
               </div>
@@ -661,201 +756,571 @@ export default function TournamentsPage() {
         </div>
       )}
 
-      {/* EDIT / SETTINGS TOURNAMENT MODAL */}
+      {/* EDIT / CHALLONGE SETTINGS TOURNAMENT MODAL */}
       {editTourn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-xl bg-[#091122] border border-cyan-500/50 rounded-2xl p-6 sm:p-7 shadow-2xl shadow-cyan-500/20 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-3xl bg-[#141416] border border-orange-500/40 rounded-2xl p-5 sm:p-7 shadow-2xl shadow-orange-500/20 max-h-[92vh] overflow-y-auto space-y-6 text-stone-200">
             <button
               onClick={() => setEditTourn(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white transition text-lg"
+              className="absolute top-4 right-4 text-stone-400 hover:text-white transition text-lg"
             >
               ✕
             </button>
 
-            <div className="text-center mb-6">
-              <div className="inline-block p-2.5 bg-cyan-500/10 rounded-xl border border-cyan-500/30 mb-2">
-                <span className="text-2xl">⚙️</span>
+            {/* Header */}
+            <div className="flex items-center gap-3 pb-4 border-b border-stone-800">
+              <span className="text-2xl p-2 rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400">
+                ⚙️
+              </span>
+              <div>
+                <h2 className="text-xl font-black text-white uppercase tracking-wide">
+                  Настройки турнира (Регламент Challonge)
+                </h2>
+                <p className="text-xs text-stone-400 font-mono">
+                  ID: <span className="text-orange-400">{editTourn.id}</span>
+                </p>
               </div>
-              <h2 className="text-xl font-black text-white">Управление и настройки турнира</h2>
-              <p className="text-xs text-slate-400 mt-1 font-mono">
-                ID: <span className="text-cyan-400">{editTourn.id}</span>
-              </p>
             </div>
 
             {editError && (
-              <div className="mb-4 p-3 rounded-lg bg-red-950/70 border border-red-500/40 text-red-300 text-xs font-semibold">
+              <div className="p-3.5 rounded-lg bg-red-950/70 border border-red-500/40 text-red-300 text-xs font-semibold">
                 {editError}
               </div>
             )}
 
             {editSuccess && (
-              <div className="mb-4 p-3 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
+              <div className="p-3.5 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-xs font-bold">
                 ✓ {editSuccess}
               </div>
             )}
 
-            <form onSubmit={handleUpdateTournament} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Название турнира <span className="text-cyan-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
-                />
-              </div>
+            <form onSubmit={handleUpdateTournament} className="space-y-6">
+              {/* SECTION: ОСНОВНАЯ ИНФОРМАЦИЯ */}
+              <div className="space-y-4">
+                <span className="text-xs font-black uppercase tracking-wider text-orange-400 block border-b border-stone-800 pb-1">
+                  ИНФОРМАЦИЯ О ТУРНИРЕ
+                </span>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Описание турнира
-                </label>
-                <textarea
-                  rows={2}
-                  value={editDesc}
-                  onChange={(e) => setEditDesc(e.target.value)}
-                  className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
-                />
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-300 mb-1">
+                      Название турнира <span className="text-orange-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-[#1f1f23] border border-stone-700 text-sm text-white focus:outline-none focus:border-orange-400 transition"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Статус турнира
-                  </label>
-                  <select
-                    value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition font-bold"
-                  >
-                    <option value="registration">🟢 Регистрация открыта</option>
-                    <option value="ongoing">🔵 Идет турнир (Сетка активна)</option>
-                    <option value="completed">⚫ Завершен</option>
-                  </select>
+                  <div>
+                    <label className="block text-xs font-bold text-stone-300 mb-1">
+                      Статус турнира
+                    </label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-[#1f1f23] border border-stone-700 text-xs text-white focus:outline-none focus:border-orange-400 transition font-bold"
+                    >
+                      <option value="registration">🟢 Регистрация открыта</option>
+                      <option value="ongoing">🔵 Идет турнир (Сетка активна)</option>
+                      <option value="completed">⚫ Завершен</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Формат турнира
+                  <label className="block text-xs font-bold text-stone-300 mb-1">
+                    Описание турнира
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-lg bg-[#1f1f23] border border-stone-700 text-xs text-white focus:outline-none focus:border-orange-400 transition"
+                  />
+                </div>
+              </div>
+
+              {/* SECTION: ФОРМАТ И СЕТКА (Challonge exact screenshot) */}
+              <div className="space-y-4">
+                <span className="text-xs font-black uppercase tracking-wider text-orange-400 block border-b border-stone-800 pb-1">
+                  ФОРМАТ
+                </span>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-300 mb-1">
+                    Формат <span className="text-orange-400">*</span>
                   </label>
                   <select
                     value={editFormat}
                     onChange={(e) => setEditFormat(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#1f1f23] border border-stone-700 text-xs text-white focus:outline-none focus:border-orange-400 transition font-bold"
                   >
-                    <option value="double_elimination">Double Elimination (Сетка лузеров)</option>
-                    <option value="single_elimination">Single Elimination (На выбывание)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Лимит команд
-                  </label>
-                  <select
-                    value={editMaxTeams}
-                    onChange={(e) => setEditMaxTeams(Number(e.target.value))}
-                    className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
-                  >
-                    <option value={4}>4 команды</option>
-                    <option value={8}>8 команд</option>
-                    <option value={16}>16 команд</option>
+                    <option value="double_elimination">Double Elimination</option>
+                    <option value="single_elimination">Single Elimination</option>
+                    <option value="round_robin">Round Robin</option>
+                    <option value="swiss">Swiss</option>
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Призовой фонд
-                  </label>
-                  <input
-                    type="text"
-                    value={editPrizePool}
-                    onChange={(e) => setEditPrizePool(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Видимость турнира
-                  </label>
-                  <select
-                    value={editIsPublic ? "public" : "private"}
-                    onChange={(e) => setEditIsPublic(e.target.value === "public")}
-                    className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
-                  >
-                    <option value="public">Публичный (виден всем)</option>
-                    <option value="private">Приватный (по паролю)</option>
-                  </select>
-                </div>
-
-                {!editIsPublic ? (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Пароль турнира
-                    </label>
+                <div className="space-y-2 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
                     <input
-                      type="text"
-                      value={editAccessCode}
-                      onChange={(e) => setEditAccessCode(e.target.value)}
-                      placeholder="Код доступа"
-                      className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                      type="checkbox"
+                      checked={editSplitLosers}
+                      onChange={(e) => setEditSplitLosers(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
                     />
-                  </div>
-                ) : (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      URL баннера
-                    </label>
+                    <span>Split Participants - Start with half of the participants in the losers bracket.</span>
+                    <span className="text-orange-400 underline cursor-pointer">Подробнее</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
                     <input
-                      type="text"
-                      value={editBannerUrl}
-                      onChange={(e) => setEditBannerUrl(e.target.value)}
-                      placeholder="/banner.jpg"
-                      className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                      type="checkbox"
+                      checked={editBreakTies}
+                      onChange={(e) => setEditBreakTies(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
                     />
+                    <span>Break ties with placement matches</span>
+                  </label>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  <label className="block text-xs font-bold text-stone-300">
+                    Гранд Финал
+                  </label>
+                  <div className="space-y-1.5 pl-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="radio"
+                        name="grand_final"
+                        value="two_matches"
+                        checked={editGrandFinal === "two_matches"}
+                        onChange={(e) => setEditGrandFinal(e.target.value)}
+                        className="text-orange-500 focus:ring-0"
+                      />
+                      <span>1-2 matches — winners bracket finalist has to be defeated twice by the losers bracket finalist</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="radio"
+                        name="grand_final"
+                        value="one_match"
+                        checked={editGrandFinal === "one_match"}
+                        onChange={(e) => setEditGrandFinal(e.target.value)}
+                        className="text-orange-500 focus:ring-0"
+                      />
+                      <span>1 match</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="radio"
+                        name="grand_final"
+                        value="none"
+                        checked={editGrandFinal === "none"}
+                        onChange={(e) => setEditGrandFinal(e.target.value)}
+                        className="text-orange-500 focus:ring-0"
+                      />
+                      <span>None</span>
+                    </label>
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* Locks toggles */}
-              <div className="p-3.5 rounded-xl bg-[#070e1c] border border-blue-900/40 space-y-2.5">
-                <span className="text-xs font-bold text-slate-300 block uppercase tracking-wider">
-                  Блокировки и правила
+              {/* SECTION: РЕГИСТРАЦИЯ (Challonge exact screenshot) */}
+              <div className="space-y-4">
+                <span className="text-xs font-black uppercase tracking-wider text-orange-400 block border-b border-stone-800 pb-1">
+                  РЕГИСТРАЦИЯ
                 </span>
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={editFantasyLocked}
-                    onChange={(e) => setEditFantasyLocked(e.target.checked)}
-                    className="rounded bg-[#0d182e] border-blue-900 text-cyan-500 focus:ring-0"
-                  />
-                  <span>🔒 Заблокировать изменения карточек в Фэнтези</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={editPredictionsLocked}
-                    onChange={(e) => setEditPredictionsLocked(e.target.checked)}
-                    className="rounded bg-[#0d182e] border-blue-900 text-cyan-500 focus:ring-0"
-                  />
-                  <span>🔒 Заблокировать прием прогнозов на матчи</span>
-                </label>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-300 mb-1">
+                    Регистрация
+                  </label>
+                  <div className="space-y-2 pl-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="radio"
+                        name="reg_type"
+                        value="participant_list"
+                        checked={editRegType === "participant_list"}
+                        onChange={(e) => setEditRegType(e.target.value)}
+                        className="text-orange-500 focus:ring-0"
+                      />
+                      <span>Предоставить список участников</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="radio"
+                        name="reg_type"
+                        value="public_page"
+                        checked={editRegType === "public_page"}
+                        onChange={(e) => setEditRegType(e.target.value)}
+                        className="text-orange-500 focus:ring-0"
+                      />
+                      <span>Страница регистрации — <i>This will allow you to ask Custom Questions to your participants</i></span>
+                    </label>
+
+                    {editRegType === "public_page" && (
+                      <div className="pl-6 space-y-1">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-400">
+                          <input
+                            type="checkbox"
+                            checked={editIsPublic}
+                            onChange={(e) => setEditIsPublic(e.target.checked)}
+                            className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                          />
+                          <span>Сделайте свою страницу регистрации общедоступной</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-300 mb-1">
+                    Вступительный взнос <span className="text-orange-400">*</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditEntryFee("free")}
+                      className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition ${
+                        editEntryFee === "free"
+                          ? "bg-orange-500 text-white shadow-md shadow-orange-500/25"
+                          : "bg-[#1f1f23] text-stone-400 hover:text-white"
+                      }`}
+                    >
+                      Свободный
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditEntryFee("paid")}
+                      className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition ${
+                        editEntryFee === "paid"
+                          ? "bg-orange-500 text-white shadow-md shadow-orange-500/25"
+                          : "bg-[#1f1f23] text-stone-400 hover:text-white"
+                      }`}
+                    >
+                      Оплачено
+                    </button>
+                  </div>
+                </div>
+
+                {/* Участники & Roster requirements */}
+                <div className="space-y-3 pt-2">
+                  <label className="block text-xs font-bold text-stone-300">
+                    Участники
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editTeamsRequired}
+                      onChange={(e) => setEditTeamsRequired(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span className="font-bold">Требуется регистрация участников в виде команд</span>
+                    <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[10px] font-black border border-amber-500/30">
+                      NEW!
+                    </span>
+                  </label>
+                  <span className="text-[11px] text-stone-400 block pl-6">
+                    When checked, you and team captains will manage team rosters.
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pl-6 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-400 mb-1">
+                        Minimum Team Size:
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={7}
+                        value={editMinTeam}
+                        onChange={(e) => setEditMinTeam(Number(e.target.value))}
+                        className="w-24 px-3 py-1.5 rounded bg-[#1f1f23] border border-stone-700 text-xs text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-stone-400 mb-1">
+                        Maximum Team Size:
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={5}
+                          max={7}
+                          value={editMaxTeam}
+                          onChange={(e) => setEditMaxTeam(Number(e.target.value))}
+                          className="w-24 px-3 py-1.5 rounded bg-[#1f1f23] border border-stone-700 text-xs text-white"
+                        />
+                        <span className="text-[10px] text-stone-400 italic">— allows for subs, alternates, coaches, etc.</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pl-6 pt-1 space-y-1">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="checkbox"
+                        checked={editAllowIncomplete}
+                        onChange={(e) => setEditAllowIncomplete(e.target.checked)}
+                        className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                      />
+                      <span>Allow teams with incomplete rosters to participate</span>
+                    </label>
+                    <span className="text-[10px] text-stone-400 block pl-6">
+                      When checked, teams smaller than minimum team size will remain in your tournament when you start it (they're normally disqualified).
+                    </span>
+                  </div>
+
+                  <div className="pl-6 pt-2 flex items-center gap-3">
+                    <span className="text-xs font-bold text-stone-300">Кубок участника (Макс. команд):</span>
+                    <input
+                      type="number"
+                      min={2}
+                      max={64}
+                      value={editParticipantCap}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setEditParticipantCap(val);
+                        setEditMaxTeams(val);
+                      }}
+                      className="w-24 px-3 py-1.5 rounded bg-[#1f1f23] border border-stone-700 text-xs text-white font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Время начала */}
+                <div className="space-y-2 pt-2">
+                  <label className="block text-xs font-bold text-stone-300 mb-1">
+                    Время начала <span className="text-orange-400">*</span>
+                  </label>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                    <input
+                      type="datetime-local"
+                      value={editStartTime}
+                      onChange={(e) => setEditStartTime(e.target.value)}
+                      className="px-3 py-2 rounded-lg bg-[#1f1f23] border border-stone-700 text-xs text-white focus:outline-none focus:border-orange-400"
+                    />
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="checkbox"
+                        checked={editTimeTentative}
+                        onChange={(e) => setEditTimeTentative(e.target.checked)}
+                        className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                      />
+                      <span className="font-bold text-orange-400">Mark as tentative</span>
+                    </label>
+                  </div>
+                  <span className="text-[11px] text-stone-400 block">
+                    (GMT+03:00) Europe/Moscow — установите ваш часовой пояс
+                  </span>
+                </div>
               </div>
 
-              <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
+              {/* SECTION: ПРОГНОЗЫ И ГОЛОСОВАНИЯ (Challonge exact screenshot) */}
+              <div className="space-y-4">
+                <span className="text-xs font-black uppercase tracking-wider text-orange-400 block border-b border-stone-800 pb-1">
+                  ПРОГНОЗЫ И ГОЛОСОВАНИЯ
+                </span>
+
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editOpenVoting}
+                      onChange={(e) => setEditOpenVoting(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>Открыть голосование для всех матчей — Голосующие должны быть зарегистрированы на платформе</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editPredBracket}
+                      onChange={(e) => setEditPredBracket(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span className="font-bold text-orange-400">Разрешить прогнозы для сетки — Только цепочки победителей</span>
+                  </label>
+
+                  <div className="pl-6 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                      <input
+                        type="checkbox"
+                        checked={editPredLower}
+                        onChange={(e) => setEditPredLower(e.target.checked)}
+                        className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                      />
+                      <span className="font-bold text-orange-400">Предсказать нижнюю сетку (1 очко за правильное предсказание)</span>
+                    </label>
+
+                    {editPredLower && (
+                      <div className="pl-6 space-y-1.5">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                          <input
+                            type="radio"
+                            name="pred_scoring"
+                            value="exponential"
+                            checked={editPredScoring === "exponential"}
+                            onChange={(e) => setEditPredScoring(e.target.value)}
+                            className="text-orange-500 focus:ring-0"
+                          />
+                          <span>Очки увеличиваются экспонентно в каждом раунде (1, 2, 4, 8, ...)</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                          <input
+                            type="radio"
+                            name="pred_scoring"
+                            value="linear"
+                            checked={editPredScoring === "linear"}
+                            onChange={(e) => setEditPredScoring(e.target.value)}
+                            className="text-orange-500 focus:ring-0"
+                          />
+                          <span>Очки увеличиваются линейно в каждом раунде (1, 2, 3, 4, ...)</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editAllowPredPre}
+                      onChange={(e) => setEditAllowPredPre(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>Разрешить публикацию прогнозов до начала турнира</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* SECTION: EXPERIMENTAL FEATURES 🚀 */}
+              <div className="space-y-4">
+                <span className="text-xs font-black uppercase tracking-wider text-orange-400 block border-b border-stone-800 pb-1">
+                  EXPERIMENTAL FEATURES 🚀
+                </span>
+
+                <div className="space-y-2 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editExpImages}
+                      onChange={(e) => setEditExpImages(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>Generate shareable images for match results? (Only works for SE, DE, RR and Swiss)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editExpEmails}
+                      onChange={(e) => setEditExpEmails(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>Require participants to have verified emails before joining the competition</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editExpCountries}
+                      onChange={(e) => setEditExpCountries(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>Allow specific countries for your registration?</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editExpFields}
+                      onChange={(e) => setEditExpFields(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>Allow custom fields in Predictions? (Only works if you have predictions activated)</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* SECTION: ФЭНТЕЗИ И ЖЕТОНЫ РЕРОЛЛА */}
+              <div className="space-y-4">
+                <span className="text-xs font-black uppercase tracking-wider text-orange-400 block border-b border-stone-800 pb-1">
+                  ФЭНТЕЗИ И ЖЕТОНЫ ПЕРЕКОВКИ ТУРНИРА
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-stone-300 mb-1">
+                      Жетоны реролла для участников турнира
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={editInitialRerolls}
+                      onChange={(e) => setEditInitialRerolls(Number(e.target.value))}
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-[#1f1f23] border border-stone-700 text-xs text-white focus:outline-none focus:border-orange-400"
+                    />
+                    <span className="text-[10px] text-stone-400 mt-1 block">
+                      Каждый участник получает это количество жетонов перековки именно для этого турнира.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-stone-300 mb-1">
+                      Призовой фонд
+                    </label>
+                    <input
+                      type="text"
+                      value={editPrizePool}
+                      onChange={(e) => setEditPrizePool(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-lg bg-[#1f1f23] border border-stone-700 text-xs text-white focus:outline-none focus:border-orange-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-[#1a1a1e] border border-stone-800 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editFantasyLocked}
+                      onChange={(e) => setEditFantasyLocked(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>🔒 Заблокировать изменения карточек в Фэнтези</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={editPredictionsLocked}
+                      onChange={(e) => setEditPredictionsLocked(e.target.checked)}
+                      className="rounded bg-[#1f1f23] border-stone-700 text-orange-500 focus:ring-0"
+                    />
+                    <span>🔒 Заблокировать прием прогнозов на матчи</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-stone-800 flex flex-col sm:flex-row items-center gap-3">
                 <button
                   type="submit"
                   disabled={editLoading}
-                  className="flex-1 w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 transition disabled:opacity-50"
+                  className="flex-1 w-full py-3 px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-orange-600/30 transition disabled:opacity-50"
                 >
-                  {editLoading ? "Сохранение..." : "💾 Сохранить настройки"}
+                  {editLoading ? "Сохранение..." : "💾 Сохранить все параметры турнира"}
                 </button>
 
                 {editTourn.id !== "ti-2026-main" && (
@@ -905,69 +1370,54 @@ export default function TournamentsPage() {
               </div>
             )}
 
-            <div className="mb-4 p-3 rounded-xl bg-blue-950/40 border border-blue-500/30 text-xs text-slate-300 space-y-1">
-              <span className="font-bold text-white block">Правило участия:</span>
-              <p className="text-[11px] text-slate-400">
-                Команда должна иметь 5 заполненных ролей (pos1 - pos5), и у каждого игрока ОБЯЗАТЕЛЬНО должен быть привязан аккаунт Steam.
-              </p>
-            </div>
-
-            {myTeams.length === 0 ? (
-              <div className="text-center py-4 space-y-3">
-                <p className="text-xs text-slate-400">
-                  У вас нет команд, где вы являетесь капитаном. Создайте команду во вкладке «Команды».
-                </p>
-                <a
-                  href="/teams"
-                  className="inline-block py-2 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition"
-                >
-                  Перейти в Команды
-                </a>
-              </div>
-            ) : (
-              <form onSubmit={handleRegisterTeam} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Выберите вашу команду
-                  </label>
+            <form onSubmit={handleRegisterTeam} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Выберите вашу команду
+                </label>
+                {myTeams.length > 0 ? (
                   <select
                     value={selectedTeamId}
                     onChange={(e) => setSelectedTeamId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
                   >
-                    {myTeams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        [{t.tag}] {t.name}
+                    {myTeams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        [{team.tag}] {team.name}
                       </option>
                     ))}
                   </select>
-                </div>
-
-                {!registerTourn.is_public && registerTourn.access_code && (
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      Код доступа турнира
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={regAccessCode}
-                      onChange={(e) => setRegAccessCode(e.target.value)}
-                      placeholder="Введите пароль турнира"
-                      className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
-                    />
+                ) : (
+                  <div className="p-3 rounded-lg bg-blue-950/40 border border-blue-900 text-xs text-slate-400">
+                    У вас пока нет созданных команд, где вы капитан. Создайте команду в разделе «Команды».
                   </div>
                 )}
+              </div>
 
-                <button
-                  type="submit"
-                  disabled={regLoading || !selectedTeamId}
-                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
-                >
-                  {regLoading ? "Проверка и запись..." : "Подтвердить регистрацию"}
-                </button>
-              </form>
-            )}
+              {!registerTourn.is_public && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Пароль турнира
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={regAccessCode}
+                    onChange={(e) => setRegAccessCode(e.target.value)}
+                    placeholder="Введите код доступа"
+                    className="w-full px-3.5 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-xs text-white focus:outline-none focus:border-cyan-400 transition"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={regLoading || myTeams.length === 0}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 transition disabled:opacity-50"
+              >
+                {regLoading ? "Регистрация..." : "Зарегистрировать команду"}
+              </button>
+            </form>
           </div>
         </div>
       )}
