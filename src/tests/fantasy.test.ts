@@ -115,9 +115,23 @@ function testCalculateFantasyPointsEdgeCases() {
   assert.equal(highDeathsPts, 0);
 }
 
+function testPartialStatsNullSafety() {
+  const partialStats: Partial<PlayerStats> = {
+    kills: 5,
+    deaths: 1,
+  };
+  const pts = calculateFantasyPoints(partialStats, []);
+  assert.ok(!Number.isNaN(pts));
+  assert.ok(pts > 0);
+
+  const emptyPts = calculateFantasyPoints({}, []);
+  assert.equal(emptyPts, 3.0);
+}
+
 testRollRandomTraits();
 testCalculateFantasyPointsBase();
 testCalculateFantasyPointsWithTraits();
 testCalculateFantasyPointsEdgeCases();
+testPartialStatsNullSafety();
 
 console.log("Fantasy unit tests PASSED successfully!");

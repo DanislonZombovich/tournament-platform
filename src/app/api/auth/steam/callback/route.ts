@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { SignJWT } from "jose";
+import { cookies } from "next/headers";
 import { query } from "@/lib/db";
 import {
   createSessionToken,
@@ -81,41 +83,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${baseUrl}/profile?login=success`);
   }
 
-  const baseUsername = steam_name.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 15) || `Player_${steamId.slice(-4)}`;
-  let finalUsername = baseUsername;
-  let counter = 1;
-
-  while (true) {
-    const check = await query(`SELECT id FROM users WHERE LOWER(username) = LOWER($1)`, [finalUsername]);
-    if (check.rows.length === 0) break;
-    finalUsername = `${baseUsername}_${counter}`;
-    counter++;
-  }
-
-  const newUserId = "usr_" + crypto.randomBytes(8).toString("hex");
-  const userCount = await query<{ count: string }>(`SELECT COUNT(*) FROM users`);
-  const isFirst = parseInt(userCount.rows[0].count, 10) === 0;
-  const role = isFirst ? "admin" : "user";
-
-  await query(
-    `INSERT INTO users (id, username, role, steam_id, steam_name, steam_avatar, fantasy_tokens)
-     VALUES ($1, $2, $3, $4, $5, $6, 20)`,
-    [newUserId, finalUsername, role, steamId, steam_name, steam_avatar]
-  );
-
-  const newUserSession: UserSession = {
-    id: newUserId,
-    username: finalUsername,
-    email: null,
-    role,
+  const pendingToken = await new SignJWT({
     steam_id: steamId,
     steam_name,
     steam_avatar,
-    fantasy_tokens: 20,
-  };
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("1h")
+    .sign(new TextEncoder().encode(process.env.AUTH_SECRET || "dota2-ti2026-super-secret-jwt-key-compendium"));
 
-  const token = await createSessionToken(newUserSession);
-  await setSessionCookie(token);
+  const cookieStore = await cookies();
+  cookieStore.set("ti_pending_steam", pendingToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 3600,
+  });
 
-  return NextResponse.redirect(`${baseUrl}/profile?signup=steam_success`);
+  const redirectUrl = `${baseUrl}/auth/setup-username?steam_id=${steamId}&steam_name=${encodeURIComponent(
+    steam_name
+  )}&token=${encodeURIComponent(pendingToken)}`;
+
+  return NextResponse.redirect(redirectUrl);
 }

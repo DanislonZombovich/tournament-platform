@@ -174,9 +174,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Фэнтези заблокировано администратором турнира" }, { status: 400 });
     }
 
-    const validRoles = ["pos1", "pos2", "pos3", "pos4", "pos5"];
+    const validRoles = ["pos1", "pos2", "pos3", "pos4", "pos5", "core", "mid", "support"];
     if (!validRoles.includes(role_slot)) {
-      return NextResponse.json({ error: "Неверный слот роли" }, { status: 400 });
+      return NextResponse.json({ error: "Неверный слот роли или баннера" }, { status: 400 });
     }
 
     if (action === "select_player") {
@@ -229,6 +229,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "reroll_traits") {
+      const { banner_id } = await req.json().catch(() => ({}));
       const userRes = await query<{ fantasy_tokens: number }>(
         `SELECT fantasy_tokens FROM users WHERE id = $1`,
         [user.id]
@@ -239,6 +240,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "У вас закончились жетоны перековки (0 осталось)" }, { status: 400 });
       }
 
+      let targetRoles = [role_slot];
+      if (banner_id === "core" || role_slot === "core" || role_slot === "pos1" || role_slot === "pos3") {
+        targetRoles = ["pos1", "pos3"];
+      } else if (banner_id === "mid" || role_slot === "mid" || role_slot === "pos2") {
+        targetRoles = ["pos2"];
+      } else if (banner_id === "support" || role_slot === "support" || role_slot === "pos4" || role_slot === "pos5") {
+        targetRoles = ["pos4", "pos5"];
+      }
+
       const newTraits = rollRandomTraits(3);
 
       await query(
@@ -246,32 +256,34 @@ export async function POST(req: NextRequest) {
         [user.id]
       );
 
-      const cardRes = await query(
-        `SELECT id FROM fantasy_cards WHERE user_id = $1 AND tournament_id = $2 AND role_slot = $3`,
-        [user.id, tournamentId, role_slot]
-      );
+      for (const r of targetRoles) {
+        const cardRes = await query(
+          `SELECT id FROM fantasy_cards WHERE user_id = $1 AND tournament_id = $2 AND role_slot = $3`,
+          [user.id, tournamentId, r]
+        );
 
-      if (cardRes.rows.length === 0) {
-        const cardId = "fc_" + crypto.randomBytes(8).toString("hex");
-        await query(
-          `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, traits)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [cardId, user.id, tournamentId, role_slot, JSON.stringify(newTraits)]
-        );
-      } else {
-        await query(
-          `UPDATE fantasy_cards
-           SET traits = $1
-           WHERE user_id = $2 AND tournament_id = $3 AND role_slot = $4`,
-          [JSON.stringify(newTraits), user.id, tournamentId, role_slot]
-        );
+        if (cardRes.rows.length === 0) {
+          const cardId = "fc_" + crypto.randomBytes(8).toString("hex");
+          await query(
+            `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, traits)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [cardId, user.id, tournamentId, r, JSON.stringify(newTraits)]
+          );
+        } else {
+          await query(
+            `UPDATE fantasy_cards
+             SET traits = $1
+             WHERE user_id = $2 AND tournament_id = $3 AND role_slot = $4`,
+            [JSON.stringify(newTraits), user.id, tournamentId, r]
+          );
+        }
       }
 
       return NextResponse.json({
         success: true,
         remaining_tokens: tokens - 1,
         traits: newTraits,
-        message: "Характеристики успешно перекованы!",
+        message: "Характеристики баннера успешно перекованы! (-1 жетон)",
       });
     }
 

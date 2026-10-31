@@ -49,6 +49,25 @@ export async function POST(req: NextRequest) {
     const t1s = parseInt(team1_score, 10);
     const t2s = parseInt(team2_score, 10);
 
+    const validScores = [
+      [2, 0],
+      [2, 1],
+      [0, 2],
+      [1, 2],
+    ];
+
+    const isValidBo3 = validScores.some(([a, b]) => a === t1s && b === t2s);
+    if (!isValidBo3) {
+      return NextResponse.json({ error: "Для серии Bo3 счет должен быть 2:0, 2:1, 0:2 или 1:2" }, { status: 400 });
+    }
+
+    if (t1s > t2s && winner_id !== match.team1_id) {
+      return NextResponse.json({ error: "Победителем должна быть команда 1 при счете в ее пользу" }, { status: 400 });
+    }
+    if (t2s > t1s && winner_id !== match.team2_id) {
+      return NextResponse.json({ error: "Победителем должна быть команда 2 при счете в ее пользу" }, { status: 400 });
+    }
+
     if (winner_id !== match.team1_id && winner_id !== match.team2_id) {
       return NextResponse.json({ error: "Победитель должен быть одной из команд матча" }, { status: 400 });
     }
@@ -199,35 +218,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    for (const item of finalStats) {
-      const cardsRes = await query<{
-        id: string;
-        user_id: string;
-        traits: any;
-      }>(
-        `SELECT id, user_id, traits FROM fantasy_cards
-         WHERE tournament_id = $1 AND role_slot = $2 AND selected_player_id = $3`,
-        [match.tournament_id, item.role_slot, item.player_id]
-      );
+    // Update match score and completion status
+    await query(
+      `UPDATE matches
+       SET team1_score = $1, team2_score = $2, winner_id = $3, status = 'completed'
+       WHERE id = $4`,
+      [t1s, t2s, winner_id, match.id]
+    );
 
-      for (const card of cardsRes.rows) {
-        let traits: RolledTrait[] = [];
-        if (typeof card.traits === "string") {
-          try {
-            traits = JSON.parse(card.traits);
-          } catch {}
-        } else if (Array.isArray(card.traits)) {
-          traits = card.traits;
-        }
+    await advanceDoubleElimination(match.tournament_id, match.match_code, winner_id, loserId);
 
-        const earned = calculateFantasyPoints(item.stats, traits);
-        await query(
-          `UPDATE fantasy_cards SET points_earned = points_earned + $1 WHERE id = $2`,
-          [earned, card.id]
-        );
-      }
-    }
-
+    // Calculate predictions for this match
     const predictionsRes = await query<{
       id: string;
       user_id: string;
@@ -256,14 +257,62 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await query(
-      `UPDATE matches
-       SET team1_score = $1, team2_score = $2, winner_id = $3, status = 'completed'
-       WHERE id = $4`,
-      [t1s, t2s, winner_id, match.id]
+    // Deterministically recalculate all fantasy cards for this tournament from completed matches
+    const allCardsRes = await query<{
+      id: string;
+      role_slot: string;
+      selected_player_id: string | null;
+      traits: any;
+    }>(
+      `SELECT id, role_slot, selected_player_id, traits FROM fantasy_cards WHERE tournament_id = $1`,
+      [match.tournament_id]
     );
 
-    await advanceDoubleElimination(match.tournament_id, match.match_code, winner_id, loserId);
+    for (const card of allCardsRes.rows) {
+      if (!card.selected_player_id) {
+        await query(`UPDATE fantasy_cards SET points_earned = 0 WHERE id = $1`, [card.id]);
+        continue;
+      }
+
+      let traits: RolledTrait[] = [];
+      if (typeof card.traits === "string") {
+        try {
+          traits = JSON.parse(card.traits);
+        } catch {}
+      } else if (Array.isArray(card.traits)) {
+        traits = card.traits;
+      }
+
+      const pStatsRes = await query<{
+        kills: number;
+        deaths: number;
+        assists: number;
+        last_hits: number;
+        denies: number;
+        gpm: number;
+        wards_placed: number;
+        wards_destroyed: number;
+        tower_kills: number;
+        roshan_kills: number;
+        first_blood: boolean;
+        stuns: number;
+      }>(
+        `SELECT mps.* FROM match_player_stats mps
+         JOIN matches m ON m.id = mps.match_id
+         WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+        [match.tournament_id, card.selected_player_id]
+      );
+
+      let totalCardPoints = 0;
+      for (const s of pStatsRes.rows) {
+        totalCardPoints += calculateFantasyPoints(s, traits);
+      }
+
+      await query(
+        `UPDATE fantasy_cards SET points_earned = $1 WHERE id = $2`,
+        [Math.round(totalCardPoints * 100) / 100, card.id]
+      );
+    }
 
     return NextResponse.json({
       success: true,

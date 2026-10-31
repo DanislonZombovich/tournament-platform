@@ -80,7 +80,7 @@ export default function FantasyPage() {
     }
   };
 
-  const handleRerollTraits = async (roleSlot: string) => {
+  const handleRerollBanner = async (bannerId: string, primaryRoleSlot: string) => {
     setActionLoading(true);
     setMessage(null);
     try {
@@ -89,12 +89,13 @@ export default function FantasyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "reroll_traits",
-          role_slot: roleSlot,
+          banner_id: bannerId,
+          role_slot: primaryRoleSlot,
         }),
       });
       const resData = await res.json();
       if (!res.ok) throw new Error(resData.error || "Ошибка перековки");
-      setMessage({ text: "Характеристики успешно перекованы! (-1 жетон)", type: "success" });
+      setMessage({ text: "Характеристики баннера успешно перекованы! (-1 жетон)", type: "success" });
       await fetchFantasy();
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
@@ -117,121 +118,140 @@ export default function FantasyPage() {
   const tokens = data?.fantasy_tokens ?? 20;
   const isLocked = data?.is_fantasy_locked ?? false;
 
-  const renderCardSlot = (roleKey: string, roleTitle: string, roleSubtitle: string) => {
+  const roleTitles: Record<string, { name: string; posName: string }> = {
+    pos1: { name: "Керри", posName: "Позиция 1" },
+    pos2: { name: "Мидлейнер", posName: "Позиция 2" },
+    pos3: { name: "Оффлейнер", posName: "Позиция 3" },
+    pos4: { name: "Частичная поддержка", posName: "Позиция 4" },
+    pos5: { name: "Полная поддержка", posName: "Позиция 5" },
+  };
+
+  const renderPlayerSlot = (roleKey: string) => {
     const card = cardsMap.get(roleKey);
     const player = card?.selected_player;
-    const traits = card?.traits || [];
+    const info = roleTitles[roleKey] || { name: roleKey, posName: "" };
 
     return (
-      <div className="flex flex-col h-full bg-[#121620]/90 border border-amber-500/40 rounded-xl overflow-hidden shadow-xl shadow-black/60 relative group hover:border-amber-400 transition-all duration-300">
-        <div className="bg-gradient-to-r from-amber-950/80 via-[#221c13] to-amber-950/80 px-4 py-2.5 border-b border-amber-500/30 flex items-center justify-between">
-          <div className="flex flex-col">
-            <span className="text-xs font-black tracking-widest text-amber-300 uppercase">{roleTitle}</span>
-            <span className="text-[10px] text-slate-400">{roleSubtitle}</span>
+      <div className="flex flex-col justify-between p-3.5 rounded-xl bg-black/60 border border-amber-500/30 hover:border-amber-400/70 transition shadow-inner flex-1 min-w-0">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black uppercase tracking-wider">
+              {info.posName}
+            </span>
+            <span className="text-[11px] font-extrabold text-slate-300 truncate">{info.name}</span>
           </div>
-          <div className="px-2 py-0.5 rounded bg-black/60 border border-amber-500/30 text-[10px] font-bold text-amber-400">
+          <span className="text-[10px] font-mono font-bold text-amber-400">
             {Math.round((card?.points_earned || 0) * 100) / 100} PTS
-          </div>
+          </span>
         </div>
 
-        <div className="p-4 flex flex-col flex-1 justify-between gap-4">
-          <div>
-            {player ? (
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-black/40 border border-slate-800">
-                <div className="relative">
-                  {player.steam_avatar ? (
-                    <img
-                      src={player.steam_avatar}
-                      alt={player.username}
-                      className="w-14 h-14 rounded-lg object-cover border border-amber-500/50"
-                    />
-                  ) : (
-                    <div className="w-14 h-14 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-lg font-black text-amber-400">
-                      {player.username.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  {player.team_logo && (
-                    <img
-                      src={player.team_logo}
-                      alt={player.team_tag}
-                      className="w-5 h-5 rounded-full absolute -bottom-1 -right-1 bg-black p-0.5 border border-amber-400"
-                    />
-                  )}
+        {player ? (
+          <div className="flex items-center gap-3 my-1 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+            <div className="relative shrink-0">
+              {player.steam_avatar ? (
+                <img
+                  src={player.steam_avatar}
+                  alt={player.username}
+                  className="w-12 h-12 rounded-lg object-cover border border-amber-400 shadow-md"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-sm font-black text-amber-400">
+                  {player.username.slice(0, 2).toUpperCase()}
                 </div>
+              )}
+              {player.team_logo && (
+                <img
+                  src={player.team_logo}
+                  alt={player.team_tag}
+                  className="w-4 h-4 rounded-full absolute -bottom-1 -right-1 bg-black p-0.5 border border-amber-400"
+                />
+              )}
+            </div>
 
-                <div className="flex flex-col flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-black uppercase">
-                      {player.team_tag}
-                    </span>
-                    <span className="text-sm font-extrabold text-white truncate">{player.username}</span>
-                  </div>
-                  <span className="text-xs text-slate-400 truncate mt-0.5">{player.team_name}</span>
-                  <span className="text-[10px] text-emerald-400 mt-0.5 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    {player.steam_name || "Steam привязан"}
-                  </span>
-                </div>
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black uppercase">
+                  {player.team_tag}
+                </span>
+                <span className="text-xs font-black text-white truncate">{player.username}</span>
               </div>
-            ) : (
-              <div className="p-5 rounded-lg border-2 border-dashed border-slate-800 bg-black/20 flex flex-col items-center justify-center text-center gap-2">
-                <span className="text-3xl opacity-40">👤</span>
-                <span className="text-xs font-bold text-slate-400">Слот не заполнен</span>
-                <span className="text-[10px] text-slate-500">Выберите игрока из 4 команд</span>
-              </div>
-            )}
-
-            {!isLocked && (
-              <button
-                type="button"
-                onClick={() => setActiveModalRole(roleKey)}
-                disabled={actionLoading}
-                className="w-full mt-3 py-2 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:text-amber-200 font-extrabold text-xs tracking-wider uppercase transition shadow-sm"
-              >
-                {player ? "Заменить игрока" : "Выбрать игрока"}
-              </button>
-            )}
-          </div>
-
-          <div className="space-y-2 pt-2 border-t border-slate-800/80">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black tracking-wider text-slate-300 uppercase flex items-center gap-1">
-                <span>⚡</span>
-                <span>Бонусы карточки (3)</span>
+              <span className="text-[10px] text-slate-400 truncate mt-0.5">{player.team_name}</span>
+              <span className="text-[9px] text-emerald-400 font-bold truncate mt-0.5 flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-emerald-400"></span>
+                {player.steam_name || "Steam привязан"}
               </span>
-              {!isLocked && (
-                <button
-                  type="button"
-                  onClick={() => handleRerollTraits(roleKey)}
-                  disabled={actionLoading || tokens <= 0}
-                  className="text-[10px] font-bold text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 disabled:opacity-40"
-                  title="Потратить 1 жетон для перековки 3 характеристик"
-                >
-                  <span>🔄</span>
-                  <span>Перековать (1 жетон)</span>
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 gap-1.5">
-              {traits.map((trait, tIdx) => (
-                <div
-                  key={tIdx}
-                  className={`px-2.5 py-1.5 rounded-md border text-xs font-bold flex items-center justify-between ${trait.colorClass}`}
-                >
-                  <span className="truncate">{trait.label}</span>
-                  <span className="font-black text-xs ml-2 shrink-0">+{trait.bonus}%</span>
-                </div>
-              ))}
-              {traits.length === 0 && (
-                <div className="text-[11px] text-slate-500 italic py-1">Характеристики еще не сгенерированы</div>
-              )}
             </div>
           </div>
+        ) : (
+          <div className="py-4 px-2 rounded-lg border border-dashed border-amber-500/30 bg-black/30 flex flex-col items-center justify-center text-center gap-1 my-1">
+            <span className="text-xl opacity-40">👤</span>
+            <span className="text-[11px] font-bold text-slate-400">Слот не выбран</span>
+            <span className="text-[9px] text-slate-500">Выберите из 4 игроков роли</span>
+          </div>
+        )}
+
+        {!isLocked && (
+          <button
+            type="button"
+            onClick={() => setActiveModalRole(roleKey)}
+            disabled={actionLoading}
+            className="w-full mt-2 py-1.5 px-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:text-amber-200 font-black text-[10px] uppercase tracking-wider transition shadow-sm"
+          >
+            {player ? "Заменить игрока" : `Выбрать ${info.name}`}
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderBannerTraits = (traits: RolledTrait[], bannerId: string, primaryRole: string) => {
+    return (
+      <div className="space-y-2 pt-3 border-t border-amber-500/30">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-black tracking-wider text-amber-300 uppercase flex items-center gap-1.5">
+            <span>⚡</span>
+            <span>Бонусы карточки</span>
+          </span>
+          {!isLocked && (
+            <button
+              type="button"
+              onClick={() => handleRerollBanner(bannerId, primaryRole)}
+              disabled={actionLoading || tokens <= 0}
+              className="text-[10px] font-bold text-amber-400 hover:text-amber-200 flex items-center gap-1 disabled:opacity-40 hover:underline"
+              title="Потратить 1 жетон для перековки характеристик баннера"
+            >
+              <span>🔄</span>
+              <span>Перековать (1 жетон)</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 gap-1.5">
+          {traits.map((trait, tIdx) => (
+            <div
+              key={tIdx}
+              className={`px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center justify-between shadow-sm ${trait.colorClass}`}
+            >
+              <span className="truncate">{trait.label}</span>
+              <span className="font-black text-xs ml-2 shrink-0">+{trait.bonus}%</span>
+            </div>
+          ))}
+          {traits.length === 0 && (
+            <div className="text-[11px] text-slate-500 italic py-1">Характеристики еще не сгенерированы</div>
+          )}
         </div>
       </div>
     );
   };
+
+  const coreCard = cardsMap.get("pos1");
+  const coreTraits = coreCard?.traits || [];
+
+  const midCard = cardsMap.get("pos2");
+  const midTraits = midCard?.traits || [];
+
+  const supportCard = cardsMap.get("pos4");
+  const supportTraits = supportCard?.traits || [];
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -244,11 +264,12 @@ export default function FantasyPage() {
               <span>🏆</span>
               <span>The International 2026 Compendium</span>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight uppercase">
               ФЭНТЕЗИ-ЛИГА ИНТА
             </h1>
-            <p className="text-sm text-slate-300 mt-2 max-w-2xl">
-              Соберите свой чемпионский ростер из 5 ролей, перековывайте характеристики карточек жетонами и получайте очки за каждый матч турнира!
+            <p className="text-xs sm:text-sm text-slate-300 mt-2 max-w-2xl">
+              Соберите свой чемпионский ростер из 5 ролей на 3 золотых баннерах (Основа, Центр, Поддержка).
+              Перековывайте характеристики карточек жетонами и получайте турнирные очки за каждый матч!
             </p>
           </div>
 
@@ -297,37 +318,102 @@ export default function FantasyPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="ti-gold-banner rounded-2xl p-5 flex flex-col gap-4">
+        <div className="ti-gold-banner rounded-2xl p-5 flex flex-col justify-between gap-5 shadow-2xl relative group">
           <div className="text-center pb-3 border-b border-amber-500/40">
-            <h2 className="text-xl font-black tracking-widest text-amber-300 uppercase">ОСНОВА</h2>
-            <p className="text-xs text-amber-200/60 font-medium">Керри и Сложная линия</p>
+            <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">Баннер 1</span>
+            <h2 className="text-2xl font-black tracking-widest text-amber-300 uppercase">ОСНОВА</h2>
+            <p className="text-xs text-amber-200/60 font-medium">Керри (Поз. 1) и Оффлейнер (Поз. 3)</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-            {renderCardSlot("pos1", "Позиция 1", "Керри")}
-            {renderCardSlot("pos3", "Позиция 3", "Оффлейнер")}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+            {renderPlayerSlot("pos1")}
+            {renderPlayerSlot("pos3")}
           </div>
+
+          {renderBannerTraits(coreTraits, "core", "pos1")}
         </div>
 
-        <div className="ti-gold-banner rounded-2xl p-5 flex flex-col gap-4">
+        <div className="ti-gold-banner rounded-2xl p-5 flex flex-col justify-between gap-5 shadow-2xl relative group">
           <div className="text-center pb-3 border-b border-amber-500/40">
-            <h2 className="text-xl font-black tracking-widest text-amber-300 uppercase">ЦЕНТР</h2>
-            <p className="text-xs text-amber-200/60 font-medium">Мидлейнер</p>
+            <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">Баннер 2</span>
+            <h2 className="text-2xl font-black tracking-widest text-amber-300 uppercase">ЦЕНТР</h2>
+            <p className="text-xs text-amber-200/60 font-medium">Мидлейнер (Поз. 2)</p>
           </div>
+
           <div className="flex-1 flex flex-col justify-center">
-            {renderCardSlot("pos2", "Позиция 2", "Центральная линия")}
+            {renderPlayerSlot("pos2")}
+          </div>
+
+          {renderBannerTraits(midTraits, "mid", "pos2")}
+        </div>
+
+        <div className="ti-gold-banner rounded-2xl p-5 flex flex-col justify-between gap-5 shadow-2xl relative group">
+          <div className="text-center pb-3 border-b border-amber-500/40">
+            <span className="text-[10px] font-black uppercase tracking-widest text-amber-400">Баннер 3</span>
+            <h2 className="text-2xl font-black tracking-widest text-amber-300 uppercase">ПОДДЕРЖКА</h2>
+            <p className="text-xs text-amber-200/60 font-medium">Частичная (Поз. 4) и Полная (Поз. 5)</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+            {renderPlayerSlot("pos4")}
+            {renderPlayerSlot("pos5")}
+          </div>
+
+          {renderBannerTraits(supportTraits, "support", "pos4")}
+        </div>
+      </div>
+
+      <div className="rounded-2xl p-6 bg-gradient-to-r from-[#14100c] via-[#20180d] to-[#121622] border-2 border-amber-500/40 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="flex items-center gap-5">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-700 flex items-center justify-center shadow-lg shadow-amber-500/30 border border-amber-300"
+              title="Бонусная Эмблема Compendium (+)"
+            >
+              <span className="text-2xl font-black text-black">➕</span>
+            </div>
+
+            <div
+              className="w-14 h-14 rounded-2xl bg-[#14231f] border-2 border-emerald-500/50 flex items-center justify-center shadow-lg shadow-emerald-500/20"
+              title="Компас Защитника TI"
+            >
+              <span className="text-2xl">🧭</span>
+            </div>
+
+            <div
+              className="w-14 h-14 rounded-2xl bg-[#1a1728] border-2 border-purple-500/50 flex items-center justify-center shadow-lg shadow-purple-500/20"
+              title="Летопись The International"
+            >
+              <span className="text-2xl">📖</span>
+            </div>
+
+            <div
+              className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-900 to-fuchsia-950 border-2 border-fuchsia-400/80 flex items-center justify-center shadow-lg shadow-fuchsia-500/30 relative"
+              title="Сосуд Жетонов Перековки"
+            >
+              <span className="text-2xl animate-pulse">🧪</span>
+              <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full bg-amber-400 text-black text-[9px] font-black">
+                {tokens}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col">
+            <span className="text-xs font-black text-amber-300 uppercase tracking-widest">
+              Артефакты и Жетоны Compendium
+            </span>
+            <span className="text-xs text-slate-300 mt-0.5">
+              У вас в инвентаре <strong className="text-amber-400 font-bold">{tokens} из 20 жетонов</strong> для перековки характеристик карточек.
+            </span>
           </div>
         </div>
 
-        <div className="ti-gold-banner rounded-2xl p-5 flex flex-col gap-4">
-          <div className="text-center pb-3 border-b border-amber-500/40">
-            <h2 className="text-xl font-black tracking-widest text-amber-300 uppercase">ПОДДЕРЖКА</h2>
-            <p className="text-xs text-amber-200/60 font-medium">Частичная и полная поддержка</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-            {renderCardSlot("pos4", "Позиция 4", "Частичная поддержка")}
-            {renderCardSlot("pos5", "Позиция 5", "Полная поддержка")}
-          </div>
-        </div>
+        <a
+          href="/leaderboard"
+          className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-white transition shrink-0"
+        >
+          Таблица лидеров фэнтези →
+        </a>
       </div>
 
       <div className="ti-panel rounded-xl p-6 border border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -345,12 +431,6 @@ export default function FantasyPage() {
             </p>
           </div>
         </div>
-        <a
-          href="/leaderboard"
-          className="px-5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-white transition shrink-0"
-        >
-          Посмотреть таблицу лидеров →
-        </a>
       </div>
 
       {activeModalRole && (
@@ -366,10 +446,11 @@ export default function FantasyPage() {
             <div className="text-center mb-5">
               <span className="text-xs font-black text-amber-400 tracking-widest uppercase">Выбор игрока</span>
               <h3 className="text-lg font-black text-white mt-1">
-                Кандидаты на роль: {activeModalRole.toUpperCase()}
+                Кандидаты: {roleTitles[activeModalRole]?.name.toUpperCase() || activeModalRole.toUpperCase()} (
+                {roleTitles[activeModalRole]?.posName})
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                Доступны 4 профессиональных игрока, зарегистрированных на эту позицию в командах турнира
+                Доступны 4 профессиональных игрока, зарегистрированных на эту позицию в 4 командах турнира:
               </p>
             </div>
 
@@ -417,7 +498,7 @@ export default function FantasyPage() {
                           <span className="text-sm font-extrabold text-white">{cand.username}</span>
                         </div>
                         <span className="text-xs text-slate-400">{cand.team_name}</span>
-                        <span className="text-[10px] text-emerald-400">{cand.steam_name}</span>
+                        <span className="text-[10px] text-emerald-400 font-bold">{cand.steam_name}</span>
                       </div>
                     </div>
 

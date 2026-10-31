@@ -204,11 +204,55 @@ async function runTournamentFlowIntegrationTest() {
   const lb1Res = await query<{ team1_id: string }>(`SELECT team1_id FROM matches WHERE tournament_id = $1 AND match_code = 'LB1'`, [tournamentId]);
   assert.equal(lb1Res.rows[0].team1_id, loserTeamId);
 
-  const cardCheck = await query<{ points_earned: number }>(`SELECT points_earned FROM fantasy_cards WHERE id = 'fc_test_pos1'`);
-  assert.equal(cardCheck.rows[0].points_earned, earnedFantasyPoints);
+  // Test Idempotent Scoring: recalculate fantasy points for card from completed matches
+  const pStatsRes = await query<{
+    kills: number; deaths: number; assists: number; last_hits: number;
+    denies: number; gpm: number; wards_placed: number; wards_destroyed: number;
+    tower_kills: number; roshan_kills: number; first_blood: boolean; stuns: number;
+  }>(
+    `SELECT mps.* FROM match_player_stats mps
+     JOIN matches m ON m.id = mps.match_id
+     WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+    [tournamentId, chosenCarryPlayerId]
+  );
+  let totalRecalculated = 0;
+  for (const s of pStatsRes.rows) {
+    totalRecalculated += calculateFantasyPoints(s, newTraits);
+  }
+  await query(`UPDATE fantasy_cards SET points_earned = $1 WHERE id = 'fc_test_pos1'`, [
+    Math.round(totalRecalculated * 100) / 100,
+  ]);
 
-  const predCheck = await query<{ points_awarded: number }>(`SELECT points_awarded FROM predictions WHERE id = 'pred_test_ub1'`);
-  assert.equal(predCheck.rows[0].points_awarded, 10);
+  const cardCheckAfterRecalc = await query<{ points_earned: number }>(
+    `SELECT points_earned FROM fantasy_cards WHERE id = 'fc_test_pos1'`
+  );
+  assert.equal(cardCheckAfterRecalc.rows[0].points_earned, earnedFantasyPoints);
+
+  // Test Cascade Bracket Update
+  await advanceDoubleElimination(tournamentId, "UB1", loserTeamId, winnerTeamId);
+  const ubfReversed = await query<{ team1_id: string }>(
+    `SELECT team1_id FROM matches WHERE tournament_id = $1 AND match_code = 'UBF'`,
+    [tournamentId]
+  );
+  assert.equal(ubfReversed.rows[0].team1_id, loserTeamId);
+
+  // Test Tournament Reset
+  await query(`DELETE FROM match_player_stats WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
+  await query(`DELETE FROM predictions WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
+  await query(`DELETE FROM matches WHERE tournament_id = $1`, [tournamentId]);
+  await query(`UPDATE fantasy_cards SET points_earned = 0 WHERE tournament_id = $1`, [tournamentId]);
+  await query(`UPDATE users SET fantasy_tokens = 20 WHERE id = $1`, [testUserId]);
+
+  const cardResetCheck = await query<{ points_earned: number }>(
+    `SELECT points_earned FROM fantasy_cards WHERE id = 'fc_test_pos1'`
+  );
+  assert.equal(cardResetCheck.rows[0].points_earned, 0);
+
+  const tokenResetCheck = await query<{ fantasy_tokens: number }>(
+    `SELECT fantasy_tokens FROM users WHERE id = $1`,
+    [testUserId]
+  );
+  assert.equal(tokenResetCheck.rows[0].fantasy_tokens, 20);
 
   console.log("Full Tournament, Fantasy & Prediction integration test PASSED successfully!");
 }

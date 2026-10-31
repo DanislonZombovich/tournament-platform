@@ -65,7 +65,31 @@ export function rollRandomTraits(count = 3): RolledTrait[] {
   });
 }
 
-export function calculateFantasyPoints(stats: PlayerStats, traits: RolledTrait[] = []): number {
+export const BANNER_CONFIGS = {
+  core: {
+    id: "core",
+    title: "ОСНОВА",
+    subtitle: "Керри (Позиция 1) и Оффлейнер (Позиция 3)",
+    roles: ["pos1", "pos3"],
+    playerCount: 2,
+  },
+  mid: {
+    id: "mid",
+    title: "ЦЕНТР",
+    subtitle: "Мидлейнер (Позиция 2)",
+    roles: ["pos2"],
+    playerCount: 1,
+  },
+  support: {
+    id: "support",
+    title: "ПОДДЕРЖКА",
+    subtitle: "Частичная (Позиция 4) и Полная поддержка (Позиция 5)",
+    roles: ["pos4", "pos5"],
+    playerCount: 2,
+  },
+} as const;
+
+export function calculateFantasyPoints(stats: Partial<PlayerStats>, traits: RolledTrait[] = []): number {
   let bonusKills = 0;
   let bonusDeaths = 0;
   let bonusCs = 0;
@@ -91,17 +115,30 @@ export function calculateFantasyPoints(stats: PlayerStats, traits: RolledTrait[]
     if (t.id === "assists") bonusAssists = fraction;
   }
 
-  const killsPts = (stats.kills * 0.3) * (1 + bonusKills);
-  const deathPenalty = (stats.deaths * 0.3) * (1 - bonusDeaths);
+  const kills = Number(stats.kills) || 0;
+  const deaths = Number(stats.deaths) || 0;
+  const assists = Number(stats.assists) || 0;
+  const lastHits = Number(stats.last_hits) || 0;
+  const denies = Number(stats.denies) || 0;
+  const gpm = Number(stats.gpm) || 0;
+  const wardsPlaced = Number(stats.wards_placed) || 0;
+  const wardsDestroyed = Number(stats.wards_destroyed) || 0;
+  const towerKills = Number(stats.tower_kills) || 0;
+  const roshanKills = Number(stats.roshan_kills) || 0;
+  const firstBlood = Boolean(stats.first_blood);
+  const stuns = Number(stats.stuns) || 0;
+
+  const killsPts = (kills * 0.3) * (1 + bonusKills);
+  const deathPenalty = (deaths * 0.3) * (1 - bonusDeaths);
   const deathsPts = Math.max(0, 3.0 - deathPenalty);
-  const csPts = ((stats.last_hits + stats.denies) * 0.003) * (1 + bonusCs);
-  const gpmPts = (stats.gpm * 0.002) * (1 + bonusGpm);
-  const wardsPts = ((stats.wards_placed + stats.wards_destroyed) * 0.5) * (1 + bonusWards);
-  const towersPts = (stats.tower_kills * 1.0) * (1 + bonusTowers);
-  const roshanPts = (stats.roshan_kills * 1.5) * (1 + bonusRoshan);
-  const fbPts = (stats.first_blood ? 4.0 : 0) * (1 + bonusFb);
-  const assistsPts = (stats.assists * 0.15) * (1 + bonusAssists);
-  const stunsPts = (stats.stuns * 0.05) * (1 + bonusStuns);
+  const csPts = ((lastHits + denies) * 0.003) * (1 + bonusCs);
+  const gpmPts = (gpm * 0.002) * (1 + bonusGpm);
+  const wardsPts = ((wardsPlaced + wardsDestroyed) * 0.5) * (1 + bonusWards);
+  const towersPts = (towerKills * 1.0) * (1 + bonusTowers);
+  const roshanPts = (roshanKills * 1.5) * (1 + bonusRoshan);
+  const fbPts = (firstBlood ? 4.0 : 0) * (1 + bonusFb);
+  const assistsPts = (assists * 0.15) * (1 + bonusAssists);
+  const stunsPts = (stuns * 0.05) * (1 + bonusStuns);
 
   const total = killsPts + deathsPts + csPts + gpmPts + wardsPts + towersPts + roshanPts + fbPts + assistsPts + stunsPts;
   return Math.round(total * 100) / 100;

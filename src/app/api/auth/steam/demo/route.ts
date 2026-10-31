@@ -5,7 +5,7 @@ import { createSessionToken, getCurrentUser, setSessionCookie, UserSession } fro
 
 export async function POST(req: NextRequest) {
   try {
-    const { customSteamId, customPersona } = await req.json().catch(() => ({}));
+    const { customSteamId, customPersona, username: customUsername } = await req.json().catch(() => ({}));
     const currentUser = await getCurrentUser();
 
     const randomSuffix = Math.floor(10000000 + Math.random() * 90000000);
@@ -38,17 +38,26 @@ export async function POST(req: NextRequest) {
     const userCount = await query<{ count: string }>(`SELECT COUNT(*) FROM users`);
     const isFirst = parseInt(userCount.rows[0].count, 10) === 0;
     const role = isFirst ? "admin" : "user";
-    const username = `Player_${steamId.slice(-4)}`;
+
+    let baseUsername = customUsername?.trim() || `Player_${steamId.slice(-4)}`;
+    let finalUsername = baseUsername;
+    let counter = 1;
+    while (true) {
+      const check = await query(`SELECT id FROM users WHERE LOWER(username) = LOWER($1)`, [finalUsername]);
+      if (check.rows.length === 0) break;
+      finalUsername = `${baseUsername}_${counter}`;
+      counter++;
+    }
 
     await query(
       `INSERT INTO users (id, username, role, steam_id, steam_name, steam_avatar, fantasy_tokens)
        VALUES ($1, $2, $3, $4, $5, $6, 20)`,
-      [newUserId, username, role, steamId, persona, avatar]
+      [newUserId, finalUsername, role, steamId, persona, avatar]
     );
 
     const newUserSession: UserSession = {
       id: newUserId,
-      username,
+      username: finalUsername,
       email: null,
       role,
       steam_id: steamId,

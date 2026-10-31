@@ -57,9 +57,11 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
     setLoading(true);
     setError(null);
     try {
+      const chosenName = (mode === "register" ? username : loginField).trim();
       const res = await fetch("/api/auth/steam/demo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: chosenName || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка демо-входа");

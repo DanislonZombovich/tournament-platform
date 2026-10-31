@@ -84,6 +84,11 @@ export default function JoinTeamPage({
       return;
     }
 
+    if (!currentUser.steam_id) {
+      setError("Для занятия роли в составе команды необходимо сначала привязать Steam аккаунт в профиле!");
+      return;
+    }
+
     setJoiningSlot(roleSlot);
     setError(null);
     setSuccess(null);

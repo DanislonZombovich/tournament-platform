@@ -10,6 +10,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Необходима авторизация для вступления в команду" }, { status: 401 });
     }
 
+    if (!user.steam_id) {
+      return NextResponse.json({
+        error: "Для вступления в состав команды необходимо привязать Steam аккаунт в профиле",
+      }, { status: 400 });
+    }
+
     const { invite_code, role_slot } = await req.json();
 
     if (!invite_code || !role_slot) {

@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
       await query(`DELETE FROM match_player_stats WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
       await query(`DELETE FROM predictions WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
       await query(`DELETE FROM matches WHERE tournament_id = $1`, [tournamentId]);
+      await query(`UPDATE fantasy_cards SET points_earned = 0 WHERE tournament_id = $1`, [tournamentId]);
 
       for (let i = 0; i < teamIds.length; i++) {
         await query(
@@ -197,8 +198,10 @@ export async function POST(req: NextRequest) {
       await query(`DELETE FROM match_player_stats WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
       await query(`DELETE FROM predictions WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
       await query(`DELETE FROM matches WHERE tournament_id = $1`, [tournamentId]);
+      await query(`UPDATE fantasy_cards SET points_earned = 0 WHERE tournament_id = $1`, [tournamentId]);
+      await query(`UPDATE users SET fantasy_tokens = 20`);
       await query(`UPDATE tournaments SET status = 'registration', is_fantasy_locked = false, is_predictions_locked = false WHERE id = $1`, [tournamentId]);
-      return NextResponse.json({ success: true, message: "Турнир сброшен в стадию регистрации" });
+      return NextResponse.json({ success: true, message: "Турнир сброшен в стадию регистрации. Очки очищены, жетоны перековки восстановлены (20)." });
     }
 
     return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });

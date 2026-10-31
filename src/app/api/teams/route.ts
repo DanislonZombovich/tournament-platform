@@ -66,6 +66,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
     }
 
+    if (!user.steam_id) {
+      return NextResponse.json({
+        error: "Для создания команды и занятия позиции в ростере необходимо привязать Steam аккаунт в профиле",
+      }, { status: 400 });
+    }
+
     const { name, tag, logo_url, banner_url, captain_role_slot } = await req.json();
 
     if (!name || typeof name !== "string" || name.trim().length < 2) {

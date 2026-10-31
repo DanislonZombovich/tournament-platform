@@ -286,6 +286,24 @@ export default function TeamsPage() {
               </div>
             )}
 
+            {currentUser && !currentUser.steam_id && (
+              <div className="mb-4 p-3 rounded-xl bg-amber-950/70 border border-amber-500/50 flex flex-col gap-2 text-xs">
+                <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>Требуется привязка Steam!</span>
+                </span>
+                <p className="text-slate-300 text-[11px]">
+                  Капитан команды и все 5 игроков основы обязаны иметь привязанный Steam для участия в турнире.
+                </p>
+                <a
+                  href="/profile"
+                  className="mt-1 py-1.5 px-3 rounded bg-amber-400 text-black font-extrabold text-[11px] text-center uppercase tracking-wider hover:bg-amber-300 transition"
+                >
+                  Привязать Steam в профиле →
+                </a>
+              </div>
+            )}
+
             <form onSubmit={handleCreateTeam} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
