@@ -92,8 +92,8 @@ export default function TeamsPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <div className="w-12 h-12 rounded-full border-4 border-amber-500/20 border-t-amber-400 animate-spin"></div>
-        <p className="text-amber-300 font-bold tracking-wider text-sm">ЗАГРУЗКА КОМАНД...</p>
+        <div className="w-12 h-12 rounded-full border-4 border-blue-500/20 border-t-cyan-400 animate-spin"></div>
+        <p className="text-cyan-300 font-bold tracking-wider text-sm">ЗАГРУЗКА КОМАНД...</p>
       </div>
     );
   }
@@ -109,13 +109,13 @@ export default function TeamsPage() {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="relative rounded-2xl p-6 sm:p-8 bg-gradient-to-r from-[#17130b] via-[#241a0d] to-[#121622] border-2 border-amber-500/50 shadow-2xl shadow-amber-500/10">
+    <div className="space-y-8 animate-fade-in pb-12">
+      <div className="relative rounded-2xl p-6 sm:p-8 bg-gradient-to-r from-[#091325] via-[#0d1c3a] to-[#070e1c] border border-blue-500/40 shadow-2xl shadow-blue-500/10">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-black uppercase tracking-widest mb-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-cyan-300 text-xs font-bold uppercase tracking-widest mb-3">
               <span>⚔️</span>
-              <span>Команды The International 2026</span>
+              <span>Команды и составы Dota 2</span>
             </div>
             <h1 className="text-3xl font-black text-white tracking-tight">
               РОСТЕРЫ И КВАЛИФИКАЦИЯ
@@ -128,7 +128,7 @@ export default function TeamsPage() {
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
-            className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition shrink-0"
+            className="px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/25 transition shrink-0"
           >
             + Создать команду
           </button>
@@ -147,25 +147,25 @@ export default function TeamsPage() {
           return (
             <div
               key={team.id}
-              className="rounded-2xl border border-slate-800 bg-[#0e121b]/95 p-6 shadow-xl flex flex-col justify-between gap-5 relative hover:border-amber-500/40 transition"
+              className="rounded-2xl border border-blue-900/50 bg-[#091122]/95 p-6 shadow-xl flex flex-col justify-between gap-5 relative hover:border-blue-500/50 transition"
             >
-              <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center justify-between border-b border-blue-900/50 pb-4">
                 <div className="flex items-center gap-3.5">
                   {team.logo_url ? (
                     <img
                       src={team.logo_url}
                       alt={team.tag}
-                      className="w-12 h-12 rounded-xl object-contain bg-black/40 p-1 border border-amber-500/30"
+                      className="w-12 h-12 rounded-xl object-contain bg-black/40 p-1 border border-blue-500/30"
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center font-black text-amber-400 border border-slate-700">
+                    <div className="w-12 h-12 rounded-xl bg-blue-900/60 flex items-center justify-center font-black text-cyan-300 border border-blue-700">
                       {team.tag}
                     </div>
                   )}
                   <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                       <span className="text-lg font-black text-white">{team.name}</span>
-                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase">
+                      <span className="px-2 py-0.5 rounded bg-blue-500/20 text-cyan-300 text-[10px] font-black uppercase">
                         {team.tag}
                       </span>
                     </div>
@@ -178,12 +178,12 @@ export default function TeamsPage() {
                     className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
                       isEligible
                         ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
-                        : "bg-amber-950/80 text-amber-300 border border-amber-500/40"
+                        : "bg-blue-950/80 text-cyan-300 border border-blue-500/40"
                     }`}
                   >
                     {isEligible ? "Допущена к турниру" : `Состав: ${filledCount}/5`}
                   </span>
-                  <span className="text-[10px] text-slate-500 mt-1">
+                  <span className="text-[10px] text-slate-400 mt-1">
                     Steam: {steamCount}/5
                   </span>
                 </div>
@@ -203,8 +203,8 @@ export default function TeamsPage() {
                         key={roleKey}
                         className={`flex items-center justify-between p-2 rounded-lg text-xs border ${
                           member
-                            ? "bg-slate-900/60 border-slate-800"
-                            : "bg-black/20 border-dashed border-slate-800/80"
+                            ? "bg-[#0d182e] border-blue-900/60"
+                            : "bg-black/20 border-dashed border-blue-900/40"
                         }`}
                       >
                         <span className="text-slate-400 font-medium text-[11px]">
@@ -219,13 +219,13 @@ export default function TeamsPage() {
                                 Steam ✓
                               </span>
                             ) : (
-                              <span className="text-[10px] text-red-400 font-bold bg-red-950/50 px-1.5 py-0.2 rounded border border-red-500/30">
+                              <span className="text-[10px] text-rose-400 font-bold bg-rose-950/50 px-1.5 py-0.2 rounded border border-rose-500/30">
                                 Нет Steam ✗
                               </span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[10px] font-bold text-amber-400/80 italic">
+                          <span className="text-[10px] font-bold text-cyan-400/80 italic">
                             Свободный слот
                           </span>
                         )}
@@ -235,20 +235,20 @@ export default function TeamsPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+              <div className="pt-3 border-t border-blue-900/60 flex items-center justify-between gap-2">
                 <div className="flex flex-col flex-1 min-w-0">
                   <span className="text-[10px] text-slate-500 uppercase font-bold">Ссылка-приглашение в состав</span>
                   <input
                     type="text"
                     readOnly
                     value={inviteUrl}
-                    className="mt-0.5 bg-black/40 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-300 font-mono select-all truncate"
+                    className="mt-0.5 bg-black/40 border border-blue-900/50 rounded px-2 py-1 text-[11px] text-slate-300 font-mono select-all truncate"
                   />
                 </div>
 
                 <a
                   href={`/teams/join/${team.invite_code}`}
-                  className="px-3.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-black uppercase tracking-wider transition shrink-0 self-end"
+                  className="px-3.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/40 text-cyan-300 text-xs font-black uppercase tracking-wider transition shrink-0 self-end"
                 >
                   Вступить →
                 </a>
@@ -258,24 +258,24 @@ export default function TeamsPage() {
         })}
 
         {teams.length === 0 && (
-          <div className="col-span-2 p-12 text-center text-slate-400 text-xs bg-slate-900/40 rounded-2xl border border-slate-800">
-            Команды еще не созданы. Создайте первую команду или нажмите в админ-панели &quot;Заполнить демо-данные TI 2026&quot;.
+          <div className="col-span-2 p-12 text-center text-slate-400 text-xs bg-slate-900/40 rounded-2xl border border-blue-900/40">
+            Команды еще не созданы. Создайте первую команду для участия в турнирах.
           </div>
         )}
       </div>
 
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-md bg-[#0e121b] border-2 border-amber-500/50 rounded-2xl p-6 shadow-2xl">
+          <div className="relative w-full max-w-md bg-[#091122] border border-blue-500/40 rounded-2xl p-6 shadow-2xl shadow-blue-500/20">
             <button
               onClick={() => setIsCreateOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white transition"
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition text-lg"
             >
               ✕
             </button>
 
             <div className="text-center mb-5">
-              <span className="text-xs font-black text-amber-400 tracking-widest uppercase">Новая команда</span>
+              <span className="text-xs font-black text-cyan-400 tracking-widest uppercase">Новая команда</span>
               <h3 className="text-xl font-black text-white mt-1">Создание команды</h3>
               <p className="text-xs text-slate-400 mt-1">Вы станете капитаном и займете выбранную роль</p>
             </div>
@@ -287,8 +287,8 @@ export default function TeamsPage() {
             )}
 
             {currentUser && !currentUser.steam_id && (
-              <div className="mb-4 p-3 rounded-xl bg-amber-950/70 border border-amber-500/50 flex flex-col gap-2 text-xs">
-                <span className="font-bold text-amber-300 flex items-center gap-1.5">
+              <div className="mb-4 p-3 rounded-xl bg-blue-950/70 border border-blue-500/40 flex flex-col gap-2 text-xs">
+                <span className="font-bold text-cyan-300 flex items-center gap-1.5">
                   <span>⚠️</span>
                   <span>Требуется привязка Steam!</span>
                 </span>
@@ -297,7 +297,7 @@ export default function TeamsPage() {
                 </p>
                 <a
                   href="/profile"
-                  className="mt-1 py-1.5 px-3 rounded bg-amber-400 text-black font-extrabold text-[11px] text-center uppercase tracking-wider hover:bg-amber-300 transition"
+                  className="mt-1 py-1.5 px-3 rounded bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-extrabold text-[11px] text-center uppercase tracking-wider hover:from-blue-500 hover:to-cyan-400 transition"
                 >
                   Привязать Steam в профиле →
                 </a>
@@ -307,21 +307,21 @@ export default function TeamsPage() {
             <form onSubmit={handleCreateTeam} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Название команды <span className="text-amber-400">*</span>
+                  Название команды <span className="text-cyan-400">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Например: Team Liquid, Virtus.pro"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  placeholder="Например: Team Liquid, Virtus.pro, Team Spirit"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Тег команды (2-6 символов) <span className="text-amber-400">*</span>
+                  Тег команды (2-6 символов) <span className="text-cyan-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -330,7 +330,7 @@ export default function TeamsPage() {
                   value={tag}
                   onChange={(e) => setTag(e.target.value.toUpperCase())}
                   placeholder="TL, VP, TS"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white uppercase placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono font-bold"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white uppercase placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono font-bold"
                 />
               </div>
 
@@ -343,18 +343,18 @@ export default function TeamsPage() {
                   value={logoUrl}
                   onChange={(e) => setLogoUrl(e.target.value)}
                   placeholder="https://example.com/logo.png"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Ваша роль в команде <span className="text-amber-400">*</span>
+                  Ваша роль в команде <span className="text-cyan-400">*</span>
                 </label>
                 <select
                   value={captainRole}
                   onChange={(e) => setCaptainRole(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm text-white focus:outline-none focus:border-amber-400"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white focus:outline-none focus:border-cyan-400"
                 >
                   <option value="pos1">Позиция 1 — Керри (Carry)</option>
                   <option value="pos2">Позиция 2 — Мидлейнер (Mid)</option>
@@ -369,7 +369,7 @@ export default function TeamsPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-2.5 px-4 mt-2 rounded-lg bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-black font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-amber-500/20 transition disabled:opacity-50"
+                className="w-full py-2.5 px-4 mt-2 rounded-lg bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
               >
                 {submitting ? "Создание..." : "Создать команду и получить инвайт-код"}
               </button>

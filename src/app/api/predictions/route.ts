@@ -3,10 +3,11 @@ import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser();
-    const tournamentId = "ti-2026-main";
+    const { searchParams } = new URL(req.url);
+    const tournamentId = searchParams.get("tournament_id") || "ti-2026-main";
 
     const tournamentRes = await query<{
       id: string;
@@ -58,30 +59,27 @@ export async function GET() {
     if (user) {
       const predRes = await query<{
         match_id: string;
-        predicted_winner_id: string;
+        predicted_winner_id: string | null;
         predicted_team1_score: number;
         predicted_team2_score: number;
         points_awarded: number;
         is_calculated: boolean;
       }>(
-        `SELECT match_id, predicted_winner_id, predicted_team1_score, predicted_team2_score, points_awarded, is_calculated
-         FROM predictions WHERE user_id = $1`,
-        [user.id]
+        `SELECT p.match_id, p.predicted_winner_id, p.predicted_team1_score, p.predicted_team2_score,
+                p.points_awarded, p.is_calculated
+         FROM predictions p
+         JOIN matches m ON m.id = p.match_id
+         WHERE p.user_id = $1 AND m.tournament_id = $2`,
+        [user.id, tournamentId]
       );
       userPredictions = predRes.rows;
     }
 
-    const predictionMap = new Map(userPredictions.map((p) => [p.match_id, p]));
-
-    const matchesWithPredictions = matchesRes.rows.map((m) => ({
-      ...m,
-      user_prediction: predictionMap.get(m.id) || null,
-    }));
-
     return NextResponse.json({
       tournament,
       is_predictions_locked: tournament.is_predictions_locked,
-      matches: matchesWithPredictions,
+      matches: matchesRes.rows,
+      user_predictions: userPredictions,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
@@ -95,95 +93,82 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
     }
 
-    const { match_id, predicted_winner_id, predicted_team1_score, predicted_team2_score } = await req.json();
+    const {
+      match_id,
+      predicted_winner_id,
+      predicted_team1_score,
+      predicted_team2_score,
+      tournament_id = "ti-2026-main",
+    } = await req.json();
 
-    if (!match_id || !predicted_winner_id || predicted_team1_score === undefined || predicted_team2_score === undefined) {
-      return NextResponse.json({ error: "Все поля прогноза обязательны" }, { status: 400 });
-    }
-
-    const tournamentRes = await query<{ is_predictions_locked: boolean }>(
-      `SELECT t.is_predictions_locked
-       FROM matches m
-       JOIN tournaments t ON t.id = m.tournament_id
-       WHERE m.id = $1`,
-      [match_id]
-    );
-
-    if (tournamentRes.rows.length === 0) {
-      return NextResponse.json({ error: "Матч не найден" }, { status: 404 });
-    }
-
-    if (tournamentRes.rows[0].is_predictions_locked) {
-      return NextResponse.json({ error: "Прогнозы заблокированы администратором" }, { status: 400 });
+    if (!match_id) {
+      return NextResponse.json({ error: "Не указан матч" }, { status: 400 });
     }
 
     const matchRes = await query<{
       id: string;
+      tournament_id: string;
       status: string;
       team1_id: string | null;
       team2_id: string | null;
     }>(
-      `SELECT id, status, team1_id, team2_id FROM matches WHERE id = $1`,
+      `SELECT m.id, m.tournament_id, m.status, m.team1_id, m.team2_id
+       FROM matches m
+       WHERE m.id = $1`,
       [match_id]
     );
 
+    if (matchRes.rows.length === 0) {
+      return NextResponse.json({ error: "Матч не найден" }, { status: 404 });
+    }
+
     const match = matchRes.rows[0];
-    if (match.status !== "pending") {
-      return NextResponse.json({ error: "Матч уже начался или завершен" }, { status: 400 });
+
+    const tournamentRes = await query<{ id: string; is_predictions_locked: boolean }>(
+      `SELECT id, is_predictions_locked FROM tournaments WHERE id = $1`,
+      [match.tournament_id]
+    );
+
+    if (tournamentRes.rows.length > 0 && tournamentRes.rows[0].is_predictions_locked) {
+      return NextResponse.json({ error: "Прогнозы заблокированы администратором турнира" }, { status: 400 });
     }
 
-    if (!match.team1_id || !match.team2_id) {
-      return NextResponse.json({ error: "Команды для этого матча еще не определены" }, { status: 400 });
-    }
-
-    if (predicted_winner_id !== match.team1_id && predicted_winner_id !== match.team2_id) {
-      return NextResponse.json({ error: "Недопустимый победитель для этого матча" }, { status: 400 });
+    if (match.status === "completed") {
+      return NextResponse.json({ error: "Матч уже завершен, прогноз не принимается" }, { status: 400 });
     }
 
     const s1 = parseInt(predicted_team1_score, 10);
     const s2 = parseInt(predicted_team2_score, 10);
-    const validScores = [
-      [2, 0],
-      [2, 1],
-      [0, 2],
-      [1, 2],
-    ];
 
-    const isValidScore = validScores.some(([a, b]) => a === s1 && b === s2);
-    if (!isValidScore) {
-      return NextResponse.json({ error: "Счет Bo3 матча должен быть 2:0, 2:1, 0:2 или 1:2" }, { status: 400 });
+    if (isNaN(s1) || isNaN(s2) || s1 < 0 || s2 < 0) {
+      return NextResponse.json({ error: "Некорректный прогноз счета" }, { status: 400 });
     }
 
-    if (predicted_winner_id === match.team1_id && s1 <= s2) {
-      return NextResponse.json({ error: "Выбранная команда победителем должна иметь больше выигранных карт" }, { status: 400 });
+    if (s1 === s2) {
+      return NextResponse.json({ error: "В матче плей-офф не может быть ничьей" }, { status: 400 });
     }
 
-    if (predicted_winner_id === match.team2_id && s2 <= s1) {
-      return NextResponse.json({ error: "Выбранная команда победителем должна иметь больше выигранных карт" }, { status: 400 });
-    }
+    const predId = "pred_" + crypto.randomBytes(8).toString("hex");
 
-    const existingPred = await query<{ id: string }>(
-      `SELECT id FROM predictions WHERE user_id = $1 AND match_id = $2`,
-      [user.id, match_id]
+    await query(
+      `INSERT INTO predictions (
+        id, user_id, match_id, predicted_winner_id, predicted_team1_score, predicted_team2_score, points_awarded, is_calculated
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 0, false)
+      ON CONFLICT (user_id, match_id)
+      DO UPDATE SET
+        predicted_winner_id = EXCLUDED.predicted_winner_id,
+        predicted_team1_score = EXCLUDED.predicted_team1_score,
+        predicted_team2_score = EXCLUDED.predicted_team2_score,
+        points_awarded = 0,
+        is_calculated = false`,
+      [predId, user.id, match.id, predicted_winner_id, s1, s2]
     );
 
-    if (existingPred.rows.length === 0) {
-      const predId = "pr_" + crypto.randomBytes(8).toString("hex");
-      await query(
-        `INSERT INTO predictions (id, user_id, match_id, predicted_winner_id, predicted_team1_score, predicted_team2_score)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [predId, user.id, match_id, predicted_winner_id, s1, s2]
-      );
-    } else {
-      await query(
-        `UPDATE predictions
-         SET predicted_winner_id = $1, predicted_team1_score = $2, predicted_team2_score = $3, created_at = NOW()
-         WHERE user_id = $4 AND match_id = $5`,
-        [predicted_winner_id, s1, s2, user.id, match_id]
-      );
-    }
-
-    return NextResponse.json({ success: true, message: "Прогноз сохранен!" });
+    return NextResponse.json({
+      success: true,
+      message: "Прогноз сохранен!",
+    });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
   }

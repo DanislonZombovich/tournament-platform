@@ -42,20 +42,71 @@ export async function initDb() {
     await pglite.exec(schemaSql);
   }
 
+  // Ensure new columns exist on existing tables
+  try {
+    const alterSql = `
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS format TEXT DEFAULT 'double_elimination';
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS max_teams INTEGER DEFAULT 8;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT TRUE;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS access_code TEXT;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS prize_pool TEXT DEFAULT '$1,000,000';
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS banner_url TEXT;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code TEXT;
+    `;
+    if (pool) {
+      await pool.query(alterSql);
+    } else {
+      await getPglite().exec(alterSql);
+    }
+  } catch {}
+
   dbInitialized = true;
 
+  // Ensure default TI 2026 tournament exists as a ready-made completed/featured tournament
   const defaultTournament = pool
     ? await pool.query(`SELECT id FROM tournaments WHERE id = $1`, ["ti-2026-main"])
     : await getPglite().query(`SELECT id FROM tournaments WHERE id = $1`, ["ti-2026-main"]);
 
   if (defaultTournament.rows.length === 0) {
-    const insertSql = `INSERT INTO tournaments (id, title, status, is_fantasy_locked, is_predictions_locked)
-       VALUES ($1, $2, $3, $4, $5)`;
-    const insertParams = ["ti-2026-main", "The International 2026: Compendium Championship", "registration", false, false];
+    const insertSql = `
+      INSERT INTO tournaments (
+        id, title, description, format, max_teams, is_public, prize_pool, banner_url, status, is_fantasy_locked, is_predictions_locked
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `;
+    const insertParams = [
+      "ti-2026-main",
+      "The International 2026: Compendium Championship",
+      "Официальный главный чемпионат The International 2026 с полным фэнтези-ростером Valve и прогнозами на матчи.",
+      "double_elimination",
+      4,
+      true,
+      "$25,000,000",
+      "/banner.jpg",
+      "registration",
+      false,
+      false,
+    ];
     if (pool) {
       await pool.query(insertSql, insertParams);
     } else {
       await getPglite().query(insertSql, insertParams);
+    }
+  } else {
+    // Update description and banner for default tournament if empty
+    const updateSql = `
+      UPDATE tournaments 
+      SET description = COALESCE(description, 'Официальный главный чемпионат The International 2026 с полным фэнтези-ростером Valve и прогнозами на матчи.'),
+          banner_url = COALESCE(banner_url, '/banner.jpg'),
+          prize_pool = COALESCE(prize_pool, '$25,000,000')
+      WHERE id = 'ti-2026-main'
+    `;
+    if (pool) {
+      await pool.query(updateSql);
+    } else {
+      await getPglite().query(updateSql);
     }
   }
 }

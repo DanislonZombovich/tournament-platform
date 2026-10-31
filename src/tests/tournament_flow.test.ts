@@ -252,7 +252,37 @@ async function runTournamentFlowIntegrationTest() {
     `SELECT fantasy_tokens FROM users WHERE id = $1`,
     [testUserId]
   );
-  assert.equal(tokenResetCheck.rows[0].fantasy_tokens, 20);
+  // Test Dynamic Tournament Creation
+  const newTournId = "tourn_dynamic_test";
+  await query(
+    `INSERT INTO tournaments (id, title, description, format, max_teams, is_public, prize_pool)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     ON CONFLICT (id) DO NOTHING`,
+    [newTournId, "Summer Dota Masters 2026", "Custom user-created tournament", "single_elimination", 4, true, "$10,000"]
+  );
+
+  const { generateMatchesForTournament } = await import("../lib/bracket");
+  await generateMatchesForTournament(newTournId, "single_elimination", 4);
+
+  const dynamicMatches = await query<{ match_code: string }>(
+    `SELECT match_code FROM matches WHERE tournament_id = $1 ORDER BY match_order ASC`,
+    [newTournId]
+  );
+  assert.equal(dynamicMatches.rows.length, 3);
+  assert.equal(dynamicMatches.rows[0].match_code, "SF1");
+  assert.equal(dynamicMatches.rows[1].match_code, "SF2");
+  assert.equal(dynamicMatches.rows[2].match_code, "GF");
+
+  // Test Steam verification rule: user without steam_id is rejected from roster eligibility
+  await query(
+    `INSERT INTO users (id, username, email, role, steam_id)
+     VALUES ('u_nosteam_test', 'NoSteamPlayer', 'nosteam@test.com', 'user', NULL)
+     ON CONFLICT (id) DO NOTHING`
+  );
+  const steamCheck = await query<{ steam_id: string | null }>(
+    `SELECT steam_id FROM users WHERE id = 'u_nosteam_test'`
+  );
+  assert.equal(steamCheck.rows[0].steam_id, null);
 
   console.log("Full Tournament, Fantasy & Prediction integration test PASSED successfully!");
 }

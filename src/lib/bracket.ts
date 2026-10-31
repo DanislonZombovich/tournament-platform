@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { query } from "./db";
 
 export interface MatchEntity {
@@ -16,13 +17,66 @@ export interface MatchEntity {
 }
 
 export const BRACKET_MATCH_DEFINITIONS = [
-  { match_code: "UB1", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 1", match_order: 1 },
-  { match_code: "UB2", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 2", match_order: 2 },
-  { match_code: "LB1", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1", match_order: 3 },
-  { match_code: "UBF", bracket_type: "upper", round_name: "Верхняя сетка — Финал", match_order: 4 },
-  { match_code: "LBF", bracket_type: "lower", round_name: "Нижняя сетка — Финал", match_order: 5 },
-  { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 6 },
+  { match_code: "UB1", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 1", match_order: 1 },
+  { match_code: "UB2", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 2", match_order: 2 },
+  { match_code: "LB1", bracket_type: "lower" as const, round_name: "Нижняя сетка — Раунд 1", match_order: 3 },
+  { match_code: "UBF", bracket_type: "upper" as const, round_name: "Верхняя сетка — Финал", match_order: 4 },
+  { match_code: "LBF", bracket_type: "lower" as const, round_name: "Нижняя сетка — Финал", match_order: 5 },
+  { match_code: "GF", bracket_type: "grand_final" as const, round_name: "Гранд-Финал (Bo3)", match_order: 6 },
 ];
+
+export async function generateMatchesForTournament(
+  tournamentId: string,
+  format: string = "double_elimination",
+  maxTeams: number = 4
+) {
+  const existing = await query(`SELECT id FROM matches WHERE tournament_id = $1`, [tournamentId]);
+  if (existing.rows.length > 0) return;
+
+  const defs: { match_code: string; bracket_type: "upper" | "lower" | "grand_final"; round_name: string; match_order: number }[] = [];
+
+  if (format === "single_elimination" && maxTeams <= 4) {
+    defs.push(
+      { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1", match_order: 1 },
+      { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2", match_order: 2 },
+      { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 3 }
+    );
+  } else if (format === "single_elimination" && maxTeams > 4) {
+    defs.push(
+      { match_code: "QF1", bracket_type: "upper", round_name: "Четвертьфинал 1", match_order: 1 },
+      { match_code: "QF2", bracket_type: "upper", round_name: "Четвертьфинал 2", match_order: 2 },
+      { match_code: "QF3", bracket_type: "upper", round_name: "Четвертьфинал 3", match_order: 3 },
+      { match_code: "QF4", bracket_type: "upper", round_name: "Четвертьфинал 4", match_order: 4 },
+      { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1", match_order: 5 },
+      { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2", match_order: 6 },
+      { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 7 }
+    );
+  } else if (maxTeams > 4) {
+    defs.push(
+      { match_code: "UB1", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 1", match_order: 1 },
+      { match_code: "UB2", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 2", match_order: 2 },
+      { match_code: "UB3", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 3", match_order: 3 },
+      { match_code: "UB4", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 4", match_order: 4 },
+      { match_code: "UBF1", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 1", match_order: 5 },
+      { match_code: "UBF2", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 2", match_order: 6 },
+      { match_code: "LB1", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1", match_order: 7 },
+      { match_code: "UBF", bracket_type: "upper", round_name: "Верхняя сетка — Финал", match_order: 8 },
+      { match_code: "LBF", bracket_type: "lower", round_name: "Нижняя сетка — Финал", match_order: 9 },
+      { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 10 }
+    );
+  } else {
+    defs.push(...BRACKET_MATCH_DEFINITIONS);
+  }
+
+  for (const def of defs) {
+    const id = "m_" + crypto.randomBytes(8).toString("hex");
+    await query(
+      `INSERT INTO matches (id, tournament_id, match_code, bracket_type, round_name, match_order, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+      [id, tournamentId, def.match_code, def.bracket_type, def.round_name, def.match_order]
+    );
+  }
+}
 
 async function setDownstreamMatchTeam(
   tournamentId: string,

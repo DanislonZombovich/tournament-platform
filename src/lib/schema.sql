@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
   steam_id TEXT UNIQUE,
   steam_name TEXT,
   steam_avatar TEXT,
+  email_verified BOOLEAN DEFAULT FALSE,
+  verification_code TEXT,
   fantasy_tokens INTEGER DEFAULT 20,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -36,6 +38,14 @@ CREATE TABLE IF NOT EXISTS team_members (
 CREATE TABLE IF NOT EXISTS tournaments (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
+  description TEXT,
+  format TEXT DEFAULT 'double_elimination',
+  max_teams INTEGER DEFAULT 8,
+  is_public BOOLEAN DEFAULT TRUE,
+  access_code TEXT,
+  prize_pool TEXT DEFAULT '$1,000,000',
+  banner_url TEXT,
+  creator_id TEXT REFERENCES users(id),
   status TEXT DEFAULT 'registration',
   is_fantasy_locked BOOLEAN DEFAULT FALSE,
   is_predictions_locked BOOLEAN DEFAULT FALSE,
