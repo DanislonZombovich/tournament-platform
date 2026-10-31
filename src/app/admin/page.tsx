@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface TeamItem {
   id: string;
@@ -27,8 +28,22 @@ interface MatchItem {
   team2_tag: string | null;
 }
 
-export default function AdminPage() {
+interface TournamentSummary {
+  id: string;
+  title: string;
+  status: string;
+  format: string;
+  teams_count: string;
+  max_teams: number;
+}
+
+function AdminContent() {
+  const searchParams = useSearchParams();
+  const initialTournamentId = searchParams.get("tournament_id") || "ti-2026-main";
+
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentTournId, setCurrentTournId] = useState<string>(initialTournamentId);
+  const [tournamentsList, setTournamentsList] = useState<TournamentSummary[]>([]);
   const [tournament, setTournament] = useState<any>(null);
   const [teams, setTeams] = useState<TeamItem[]>([]);
   const [matches, setMatches] = useState<MatchItem[]>([]);
@@ -42,18 +57,24 @@ export default function AdminPage() {
   const [t2Score, setT2Score] = useState<number>(0);
   const [winnerId, setWinnerId] = useState<string>("");
 
-  const loadData = async () => {
+  const loadData = async (targetId?: string) => {
+    const tId = targetId || currentTournId;
     try {
       const [authRes, tournRes] = await Promise.all([
         fetch("/api/auth/me"),
-        fetch("/api/tournaments"),
+        fetch(`/api/tournaments?id=${encodeURIComponent(tId)}`),
       ]);
 
       const authData = await authRes.json();
       const tournData = await tournRes.json();
 
       setCurrentUser(authData.user);
-      setTournament(tournData.tournament);
+      setTournamentsList(tournData.tournaments || []);
+
+      if (tournData.tournament) {
+        setTournament(tournData.tournament);
+        setCurrentTournId(tournData.tournament.id);
+      }
       setTeams(tournData.registered_teams || []);
       setMatches(tournData.matches || []);
     } catch (err: any) {
@@ -64,23 +85,33 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    loadData();
-  }, []);
+    loadData(currentTournId);
+  }, [currentTournId]);
+
+  const handleSwitchTournament = (newId: string) => {
+    setCurrentTournId(newId);
+    setLoading(true);
+    setMessage(null);
+  };
 
   const handleSeedDemoData = async () => {
-    if (!confirm("Заполнить демо-команды The International 2026?")) return;
+    if (!tournament) return;
+    if (!confirm(`Заполнить демо-команды (Liquid, Gladiators, Spirit, BetBoom) для турнира "${tournament.title}"?`)) return;
     setActionLoading(true);
     setMessage(null);
     try {
       const res = await fetch("/api/admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "seed_demo_data" }),
+        body: JSON.stringify({
+          action: "seed_demo_data",
+          tournament_id: currentTournId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка сидирования");
       setMessage({ text: data.message, type: "success" });
-      await loadData();
+      await loadData(currentTournId);
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
     } finally {
@@ -89,19 +120,23 @@ export default function AdminPage() {
   };
 
   const handlePublishBracket = async () => {
-    if (!confirm("Опубликовать сетку и перевести турнир в статус ongoing?")) return;
+    if (!tournament) return;
+    if (!confirm(`Опубликовать сетку турнира "${tournament.title}" и перевести в статус ongoing?`)) return;
     setActionLoading(true);
     setMessage(null);
     try {
       const res = await fetch("/api/admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "publish_bracket" }),
+        body: JSON.stringify({
+          action: "publish_bracket",
+          tournament_id: currentTournId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка публикации сетки");
       setMessage({ text: data.message, type: "success" });
-      await loadData();
+      await loadData(currentTournId);
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
     } finally {
@@ -110,6 +145,7 @@ export default function AdminPage() {
   };
 
   const handleToggleLock = async (fantasyLocked: boolean, predictionsLocked: boolean) => {
+    if (!tournament) return;
     setActionLoading(true);
     setMessage(null);
     try {
@@ -118,6 +154,7 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "toggle_locks",
+          tournament_id: currentTournId,
           is_fantasy_locked: fantasyLocked,
           is_predictions_locked: predictionsLocked,
         }),
@@ -125,7 +162,32 @@ export default function AdminPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка переключения блокировок");
       setMessage({ text: data.message, type: "success" });
-      await loadData();
+      await loadData(currentTournId);
+    } catch (err: any) {
+      setMessage({ text: err.message, type: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleChangeStatus = async (status: string) => {
+    if (!tournament) return;
+    setActionLoading(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "change_status",
+          tournament_id: currentTournId,
+          new_status: status,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка смены статуса");
+      setMessage({ text: data.message, type: "success" });
+      await loadData(currentTournId);
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
     } finally {
@@ -134,19 +196,23 @@ export default function AdminPage() {
   };
 
   const handleResetTournament = async () => {
-    if (!confirm("ВНИМАНИЕ: Сбросить результаты всех матчей турнира и вернуть регистрацию?")) return;
+    if (!tournament) return;
+    if (!confirm(`ВНИМАНИЕ: Сбросить результаты всех матчей турнира "${tournament.title}" и вернуть регистрацию?`)) return;
     setActionLoading(true);
     setMessage(null);
     try {
       const res = await fetch("/api/admin", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset_tournament" }),
+        body: JSON.stringify({
+          action: "reset_tournament",
+          tournament_id: currentTournId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка сброса турнира");
       setMessage({ text: data.message, type: "success" });
-      await loadData();
+      await loadData(currentTournId);
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
     } finally {
@@ -174,7 +240,7 @@ export default function AdminPage() {
       if (!res.ok) throw new Error(data.error || "Ошибка сохранения результата матча");
       setMessage({ text: data.message, type: "success" });
       setSelectedMatch(null);
-      await loadData();
+      await loadData(currentTournId);
     } catch (err: any) {
       setMessage({ text: err.message, type: "error" });
     } finally {
@@ -182,7 +248,7 @@ export default function AdminPage() {
     }
   };
 
-  if (loading) {
+  if (loading && !tournament) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div className="w-12 h-12 rounded-full border-4 border-blue-500/20 border-t-cyan-400 animate-spin"></div>
@@ -191,13 +257,15 @@ export default function AdminPage() {
     );
   }
 
-  if (currentUser?.role !== "admin") {
+  const isAdmin = currentUser && (currentUser.role === "admin" || currentUser.id === "usr_d98221e7ed837829");
+
+  if (!isAdmin) {
     return (
       <div className="max-w-md mx-auto p-8 rounded-2xl bg-[#091122] border border-rose-500/40 text-center space-y-4">
         <span className="text-4xl">🚫</span>
         <h2 className="text-xl font-black text-white">Доступ ограничен</h2>
         <p className="text-xs text-slate-400">
-          Данный раздел доступен только для организаторов и администраторов турнира.
+          Данный раздел доступен только для организатора платформы (Danislon_Zombovich) и администраторов.
         </p>
         <a
           href="/"
@@ -209,20 +277,82 @@ export default function AdminPage() {
     );
   }
 
+  const completedMatchesCount = matches.filter((m) => m.status === "completed").length;
+  const participantCap = tournament?.participant_cap || tournament?.max_teams || 8;
+
   return (
     <div className="space-y-8 animate-fade-in pb-12">
+      {/* TOURNAMENT SELECTOR BAR */}
+      <div className="p-4 sm:p-5 rounded-2xl bg-[#0d172e] border border-blue-500/40 shadow-xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🏆</span>
+            <span className="text-xs font-black uppercase text-cyan-400 tracking-wider">
+              Выберите турнир для управления:
+            </span>
+          </div>
+
+          <select
+            value={currentTournId}
+            onChange={(e) => handleSwitchTournament(e.target.value)}
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#070e1c] border border-cyan-500/50 text-xs font-extrabold text-white focus:outline-none focus:border-cyan-300 cursor-pointer shadow-inner"
+          >
+            {tournamentsList.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.title} [{t.status === "registration" ? "Регистрация" : t.status === "ongoing" ? "Идет" : "Завершен"}]
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {tournament && (
+            <a
+              href={`/tournaments?edit=${tournament.id}`}
+              className="px-3.5 py-2 rounded-xl bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/50 text-orange-300 hover:text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+              title="Открыть регламент и настройки Challonge"
+            >
+              <span>⚙️</span>
+              <span>Настройки Challonge</span>
+            </a>
+          )}
+
+          <a
+            href={`/?tournament_id=${currentTournId}`}
+            className="px-3.5 py-2 rounded-xl bg-blue-950/70 hover:bg-blue-900 border border-blue-500/40 text-cyan-300 text-xs font-bold transition flex items-center gap-1.5"
+          >
+            <span>👀</span>
+            <span>Открыть live-сетку</span>
+          </a>
+
+          <a
+            href="/tournaments"
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white text-xs font-extrabold transition flex items-center gap-1.5 shadow-md shadow-blue-500/20"
+          >
+            <span>➕</span>
+            <span>Все турниры / Создать</span>
+          </a>
+        </div>
+      </div>
+
+      {/* Hero Header */}
       <div className="relative rounded-2xl p-6 sm:p-8 bg-gradient-to-r from-[#091325] via-[#0d1c3a] to-[#070e1c] border border-blue-500/40 shadow-2xl shadow-blue-500/10">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-cyan-300 text-xs font-bold uppercase tracking-widest mb-3">
-              <span>⚡</span>
-              <span>Панель управления The International 2026</span>
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-bold uppercase tracking-widest">
+              <span>👑</span>
+              <span>Панель администратора: Danislon_Zombovich</span>
             </div>
-            <h1 className="text-3xl font-black text-white tracking-tight">
-              АДМИН-ПАНЕЛЬ ТУРНИРА
+
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              УПРАВЛЕНИЕ ТУРНИРОМ: <span className="cyber-blue-text">{tournament?.title}</span>
             </h1>
-            <p className="text-xs text-slate-300 mt-2 max-w-xl">
-              Управление стадиями регистрации, публикация сетки (Double Elimination Bo3), блокировка фэнтези и ввод матчей с автоматическим начислением очков.
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Формат: <b className="text-white">{tournament?.format === "double_elimination" ? "Double Elimination" : tournament?.format === "single_elimination" ? "Single Elimination" : tournament?.format}</b> • 
+              Слотов команд: <b className="text-cyan-400">{participantCap}</b> • 
+              Гранд Финал: <b className="text-white">{tournament?.grand_final_format || "1-2 matches"}</b> • 
+              Жетонов перековки на участника: <b className="text-amber-400">{tournament?.initial_rerolls || 20}</b>
             </p>
           </div>
 
@@ -242,7 +372,7 @@ export default function AdminPage() {
               onClick={handleResetTournament}
               className="px-4 py-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 text-xs font-bold uppercase tracking-wider transition disabled:opacity-50"
             >
-              Сброс турнира
+              🔄 Сброс турнира
             </button>
           </div>
         </div>
@@ -261,51 +391,65 @@ export default function AdminPage() {
         )}
       </div>
 
+      {/* Control Grid: 3 Pillars */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Step 1: Teams */}
         <div className="rounded-2xl border border-blue-900/50 bg-[#091122]/95 p-6 shadow-xl space-y-4">
-          <span className="text-xs font-black uppercase text-cyan-400 tracking-wider">Шаг 1: Команды</span>
-          <h2 className="text-base font-black text-white">Регистрация (4 команды)</h2>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black uppercase text-cyan-400 tracking-wider">Шаг 1: Команды</span>
+            <span className="text-xs font-mono font-bold text-slate-300 bg-black/50 px-2 py-0.5 rounded border border-blue-900">
+              {teams.length} / {participantCap}
+            </span>
+          </div>
+
+          <h2 className="text-base font-black text-white">Участники турнира</h2>
           <p className="text-xs text-slate-400">
-            Зарегистрировано: {teams.length} из 4 команд.
+            Зарегистрированные команды и сиды для генерации сетки.
           </p>
 
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {teams.map((t, idx) => (
-              <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-blue-900/60 text-xs">
-                <span className="font-bold text-white">{t.name} [{t.tag}]</span>
+              <div key={t.id || idx} className="flex items-center justify-between p-2 rounded-lg bg-black/40 border border-blue-900/60 text-xs">
+                <span className="font-bold text-white truncate max-w-[150px]">{t.name} [{t.tag}]</span>
                 <span className="text-[10px] text-cyan-400 font-mono">Слот #{t.seed || idx + 1}</span>
               </div>
             ))}
+            {teams.length === 0 && (
+              <div className="p-3 text-center text-xs text-slate-500 bg-black/30 rounded-lg">
+                В турнире пока нет зарегистрированных команд. Нажмите «4 Команды TI» выше для демо.
+              </div>
+            )}
           </div>
 
           <button
             type="button"
-            disabled={actionLoading || teams.length < 4}
+            disabled={actionLoading || teams.length < 2}
             onClick={handlePublishBracket}
             className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/20 transition disabled:opacity-40"
           >
-            ⚡ Выложить сетку турнира
+            ⚡ Сформировать и выложить сетку
           </button>
         </div>
 
+        {/* Step 2: Locks */}
         <div className="rounded-2xl border border-blue-900/50 bg-[#091122]/95 p-6 shadow-xl space-y-4">
           <span className="text-xs font-black uppercase text-cyan-400 tracking-wider">Шаг 2: Блокировка</span>
           <h2 className="text-base font-black text-white">Фэнтези и Прогнозы</h2>
           <p className="text-xs text-slate-400">
-            Закрывайте прием прогнозов и изменений фэнтези перед стартом матчей турнира.
+            Закрывайте прием прогнозов и изменений карточек фэнтези перед началом игр.
           </p>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-black/40 border border-blue-900/60 text-xs">
               <span className="text-slate-300">Фэнтези:</span>
               <span className={`font-bold ${tournament?.is_fantasy_locked ? "text-rose-400" : "text-emerald-400"}`}>
-                {tournament?.is_fantasy_locked ? "Заблокировано" : "Открыто"}
+                {tournament?.is_fantasy_locked ? "🔒 Заблокировано" : "🟢 Открыто"}
               </span>
             </div>
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-black/40 border border-blue-900/60 text-xs">
               <span className="text-slate-300">Прогнозы (Pick&apos;ems):</span>
               <span className={`font-bold ${tournament?.is_predictions_locked ? "text-rose-400" : "text-emerald-400"}`}>
-                {tournament?.is_predictions_locked ? "Заблокировано" : "Открыто"}
+                {tournament?.is_predictions_locked ? "🔒 Заблокировано" : "🟢 Открыто"}
               </span>
             </div>
           </div>
@@ -330,49 +474,86 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Step 3: Stage Management */}
         <div className="rounded-2xl border border-blue-900/50 bg-[#091122]/95 p-6 shadow-xl space-y-4">
-          <span className="text-xs font-black uppercase text-cyan-400 tracking-wider">Шаг 3: Автоматизация</span>
-          <h2 className="text-base font-black text-white">Статус турнира</h2>
-          <div className="p-3 rounded-xl bg-black/40 border border-blue-900/60 text-xs space-y-1">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Стадия:</span>
-              <span className="font-bold text-cyan-400 uppercase">{tournament?.status}</span>
+          <span className="text-xs font-black uppercase text-cyan-400 tracking-wider">Шаг 3: Стадия турнира</span>
+          <h2 className="text-base font-black text-white">Статус и прогресс</h2>
+
+          <div className="p-3 rounded-xl bg-black/40 border border-blue-900/60 text-xs space-y-1.5">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Текущий статус:</span>
+              <span className={`font-extrabold uppercase px-2 py-0.5 rounded text-[10px] ${
+                tournament?.status === "registration"
+                  ? "bg-emerald-950 text-emerald-300 border border-emerald-500/40"
+                  : tournament?.status === "ongoing"
+                  ? "bg-blue-950 text-cyan-300 border border-blue-500/40"
+                  : "bg-slate-800 text-slate-300"
+              }`}>
+                {tournament?.status === "registration" ? "Регистрация" : tournament?.status === "ongoing" ? "Идет турнир" : "Завершен"}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Матчей в сетке:</span>
-              <span className="font-bold text-white">{matches.length} / 6</span>
+              <span className="font-bold text-white">{matches.length}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400">Сыграно:</span>
+              <span className="text-slate-400">Сыграно матчей:</span>
               <span className="font-bold text-emerald-400">
-                {matches.filter((m) => m.status === "completed").length} / 6
+                {completedMatchesCount} / {matches.length}
               </span>
             </div>
           </div>
 
-          <a
-            href="/"
-            className="block text-center py-2 px-3 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 border border-blue-500/40 text-xs font-bold text-cyan-300 transition"
-          >
-            Посмотреть live-сетку →
-          </a>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleChangeStatus("registration")}
+              disabled={actionLoading || tournament?.status === "registration"}
+              className="flex-1 py-1.5 px-2 rounded-lg bg-[#0e1c38] hover:bg-blue-900/50 border border-blue-900 text-[11px] font-bold text-slate-300 disabled:opacity-40"
+            >
+              Регистрация
+            </button>
+            <button
+              type="button"
+              onClick={() => handleChangeStatus("ongoing")}
+              disabled={actionLoading || tournament?.status === "ongoing"}
+              className="flex-1 py-1.5 px-2 rounded-lg bg-blue-900/50 hover:bg-blue-800 border border-blue-500/40 text-[11px] font-bold text-cyan-300 disabled:opacity-40"
+            >
+              Идет
+            </button>
+            <button
+              type="button"
+              onClick={() => handleChangeStatus("completed")}
+              disabled={actionLoading || tournament?.status === "completed"}
+              className="flex-1 py-1.5 px-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-bold text-slate-300 disabled:opacity-40"
+            >
+              Завершен
+            </button>
+          </div>
         </div>
       </div>
 
+      {/* Matches Grid and Result Entry */}
       <div className="rounded-2xl border border-blue-900/50 bg-[#091122]/95 p-6 shadow-xl space-y-5">
-        <div className="border-b border-blue-900/60 pb-3">
-          <h2 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
-            <span>🎮</span>
-            <span>Матчи сетки и ввод результатов</span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">
-            Выберите матч для ввода счета (Bo3) и статистики игроков. Система автоматически начислит очки фэнтези карточкам, рассчитает прогнозы пользователей и продвинет победителей по сетке.
-          </p>
+        <div className="border-b border-blue-900/60 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
+              <span>🎮</span>
+              <span>Матчи сетки: {tournament?.title}</span>
+            </h2>
+            <p className="text-xs text-slate-400 mt-1">
+              Кликните по матчу для завершения серии Bo3, расчета очков фэнтези и продвижения команд по турнирной сетке.
+            </p>
+          </div>
+
+          <span className="text-xs font-mono font-bold text-cyan-400 bg-blue-950/80 px-2.5 py-1 rounded-lg border border-cyan-500/30">
+            {matches.length} матчей
+          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {matches.map((m) => {
-            const hasTeams = !!(m.team1_id && m.team2_id);
+            const hasTeams = Boolean(m.team1_id && m.team2_id);
             const isCompleted = m.status === "completed";
 
             return (
@@ -382,7 +563,7 @@ export default function AdminPage() {
                   isCompleted
                     ? "bg-slate-900/40 border-blue-950"
                     : hasTeams
-                    ? "bg-[#0d182e] border-blue-500/40 hover:border-cyan-400"
+                    ? "bg-[#0d182e] border-blue-500/40 hover:border-cyan-400 shadow-md"
                     : "bg-black/20 border-blue-950"
                 }`}
               >
@@ -436,12 +617,13 @@ export default function AdminPage() {
 
           {matches.length === 0 && (
             <div className="col-span-3 p-8 text-center text-slate-500 text-xs">
-              Сетка еще не создана. Нажмите &quot;Выложить сетку турнира&quot; выше.
+              Для турнира &laquo;{tournament?.title}&raquo; сетка еще не сформирована. Нажмите &laquo;Сформировать и выложить сетку&raquo; выше.
             </div>
           )}
         </div>
       </div>
 
+      {/* Match Result Entry Modal */}
       {selectedMatch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
           <div className="relative w-full max-w-lg bg-[#091122] border border-blue-500/50 rounded-2xl p-6 shadow-2xl space-y-5">
@@ -551,5 +733,19 @@ export default function AdminPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="w-10 h-10 border-4 border-blue-500/20 border-t-cyan-400 rounded-full animate-spin"></div>
+        </div>
+      }
+    >
+      <AdminContent />
+    </Suspense>
   );
 }
