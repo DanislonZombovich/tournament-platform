@@ -37,6 +37,23 @@ export default function TeamsPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setError("Размер файла не должен превышать 2 МБ");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setLogoUrl(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
   const loadData = async () => {
     try {
       const [teamsRes, userRes] = await Promise.all([
@@ -336,15 +353,49 @@ export default function TeamsPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  URL логотипа команды
+                  Логотип команды
                 </label>
-                <input
-                  type="url"
-                  value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
-                  placeholder="https://example.com/logo.png"
-                  className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
-                />
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3">
+                    {logoUrl && (
+                      <div className="w-10 h-10 rounded-lg border border-cyan-400/40 overflow-hidden bg-black/40 flex-shrink-0 flex items-center justify-center">
+                        <img src={logoUrl} alt="Превью логотипа" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-950/80 hover:bg-blue-900 border border-cyan-500/40 text-xs font-semibold text-cyan-300 transition-all">
+                      <span>📁 Загрузить с ПК</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    {logoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setLogoUrl("")}
+                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                      >
+                        Сбросить
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={logoUrl.startsWith("data:") ? "Локальное изображение выбрано с ПК" : logoUrl}
+                    onChange={(e) => {
+                      if (!logoUrl.startsWith("data:")) {
+                        setLogoUrl(e.target.value);
+                      }
+                    }}
+                    placeholder="Или вставьте прямую ссылку (https://...)"
+                    className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Можно выбрать файл напрямую с компьютера (PNG, JPG, WebP) или указать ссылку на картинку в сети.
+                  </p>
+                </div>
               </div>
 
               <div>
