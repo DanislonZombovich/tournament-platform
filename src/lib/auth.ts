@@ -20,7 +20,7 @@ export interface UserSession {
   discord_id?: string | null;
   discord_username?: string | null;
   discord_avatar?: string | null;
-  fantasy_tokens: number;
+  fantasy_tokens?: number;
 }
 
 export async function hashPassword(password: string): Promise<string> {

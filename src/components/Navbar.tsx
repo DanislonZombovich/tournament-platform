@@ -98,11 +98,11 @@ export default function Navbar() {
               <div className="flex items-center gap-3">
                 <a
                   href="/fantasy"
-                  className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-950/80 border border-blue-500/40 text-xs font-bold text-cyan-300 hover:bg-blue-900/50 transition"
-                  title="Оставшиеся жетоны фэнтези"
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-950/80 border border-blue-500/40 text-xs font-bold text-cyan-300 hover:bg-blue-900/50 transition"
+                  title="Фэнтези лиги турниров"
                 >
-                  <span className="text-sm">🪙</span>
-                  <span>{user.fantasy_tokens ?? 20} жетонов</span>
+                  <span className="text-sm">⚔️</span>
+                  <span>Фэнтези</span>
                 </a>
 
                 <a

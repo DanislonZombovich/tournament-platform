@@ -128,10 +128,13 @@ function ProfileContent() {
             </p>
 
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-2">
-              <div className="px-3 py-1.5 rounded-xl bg-blue-950/70 border border-blue-500/30 text-xs font-bold text-cyan-300 flex items-center gap-1.5">
-                <span>🪙</span>
-                <span>{user.fantasy_tokens ?? 20} жетонов фэнтези</span>
-              </div>
+              <a
+                href="/fantasy"
+                className="px-3 py-1.5 rounded-xl bg-blue-950/70 hover:bg-blue-900 border border-blue-500/30 text-xs font-bold text-cyan-300 flex items-center gap-1.5 transition"
+              >
+                <span>⚔️</span>
+                <span>Фэнтези (жетоны турнира)</span>
+              </a>
               <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-300">
                 Роль: <span className="font-bold text-white capitalize">{user.role}</span>
               </div>

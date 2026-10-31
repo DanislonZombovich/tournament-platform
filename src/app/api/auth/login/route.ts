@@ -53,7 +53,6 @@ export async function POST(req: NextRequest) {
       steam_id: user.steam_id,
       steam_name: user.steam_name,
       steam_avatar: user.steam_avatar,
-      fantasy_tokens: user.fantasy_tokens,
     };
 
     const token = await createSessionToken(sessionUser);

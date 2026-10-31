@@ -10,48 +10,18 @@ interface AuthModalProps {
 
 export default function AuthModal({ mode: initialMode, onClose, onSuccess }: AuthModalProps) {
   const [mode, setMode] = useState<"login" | "register">(initialMode);
-  const [registerStep, setRegisterStep] = useState<"credentials" | "verify">("credentials");
 
   // Form states
   const [loginField, setLoginField] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [verificationCode, setVerificationCode] = useState("");
   const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
 
-  const [receivedCodeTip, setReceivedCodeTip] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Step 1: Request email verification code
-  const handleRequestCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send_code", email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Не удалось отправить код");
-
-      if (data.demo_code) {
-        setReceivedCodeTip(data.demo_code);
-        setVerificationCode(data.demo_code);
-      }
-      setRegisterStep("verify");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Step 2: Confirm email and complete registration with chosen username
-  const handleConfirmAndRegister = async (e: React.FormEvent) => {
+  // Direct registration handler (no verification code required)
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
@@ -61,14 +31,13 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "confirm_and_register",
-          email,
-          code: verificationCode,
-          username,
+          username: username.trim(),
+          email: email.trim() || undefined,
+          password,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка подтверждения");
+      if (!res.ok) throw new Error(data.error || "Ошибка регистрации");
 
       onSuccess();
     } catch (err: any) {
@@ -124,10 +93,6 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
     }
   };
 
-  const handleDemoSteamLogin = async () => {
-    return handleQuickLogin("steam");
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-md bg-[#091122] border border-blue-500/40 rounded-2xl p-6 sm:p-7 shadow-2xl shadow-blue-500/15">
@@ -143,18 +108,12 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
             <span className="text-2xl">🛡️</span>
           </div>
           <h2 className="text-xl font-black text-white tracking-wide">
-            {mode === "login"
-              ? "Авторизация в турнирной платформе"
-              : registerStep === "credentials"
-              ? "Регистрация через Email"
-              : "Подтверждение Email и выбор никнейма"}
+            {mode === "login" ? "Авторизация в Danislon Tournaments" : "Быстрая регистрация"}
           </h2>
           <p className="text-xs text-slate-400 mt-1">
             {mode === "login"
               ? "Войдите для управления турнирами, командами и фэнтези"
-              : registerStep === "credentials"
-              ? "Шаг 1 из 2: Укажите почту для отправки кода подтверждения"
-              : "Шаг 2 из 2: Введите полученный код и ваш уникальный никнейм"}
+              : "Создайте аккаунт моментально без кодов подтверждения"}
           </p>
         </div>
 
@@ -177,7 +136,6 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
             type="button"
             onClick={() => {
               setMode("register");
-              setRegisterStep("credentials");
               setError(null);
             }}
             className={`flex-1 pb-2.5 text-xs font-bold uppercase tracking-wider transition border-b-2 ${
@@ -193,14 +151,6 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
         {error && (
           <div className="mb-4 p-3 rounded-lg bg-red-950/70 border border-red-500/40 text-red-300 text-xs font-semibold">
             {error}
-          </div>
-        )}
-
-        {receivedCodeTip && registerStep === "verify" && (
-          <div className="mb-4 p-3 rounded-lg bg-blue-950/70 border border-blue-500/40 text-blue-200 text-xs">
-            <span className="font-bold">✉️ Тестовый код подтверждения:</span>{" "}
-            <span className="font-mono text-cyan-300 font-bold text-sm ml-1">{receivedCodeTip}</span>
-            <span className="block text-[10px] text-slate-400 mt-0.5">В реальной среде код приходит на указанный email.</span>
           </div>
         )}
 
@@ -242,15 +192,30 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
               {loading ? "Авторизация..." : "Войти в аккаунт"}
             </button>
           </form>
-        ) : registerStep === "credentials" ? (
-          <form onSubmit={handleRequestCode} className="space-y-4">
+        ) : (
+          <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
-                Email для подтверждения <span className="text-blue-400">*</span>
+                Желаемый никнейм <span className="text-cyan-400">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                minLength={3}
+                maxLength={25}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Например: Miracle, CyberTitan, Danislon"
+                className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-300 mb-1">
+                Email (необязательно)
               </label>
               <input
                 type="email"
-                required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="player@dota.gg"
@@ -260,7 +225,7 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
 
             <div>
               <label className="block text-xs font-medium text-slate-300 mb-1">
-                Пароль <span className="text-blue-400">*</span>
+                Пароль <span className="text-cyan-400">*</span>
               </label>
               <input
                 type="password"
@@ -275,64 +240,11 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || !username.trim()}
               className="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-sm shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
             >
-              {loading ? "Отправка кода..." : "Получить код подтверждения"}
+              {loading ? "Создание аккаунта..." : "Зарегистрироваться"}
             </button>
-          </form>
-        ) : (
-          <form onSubmit={handleConfirmAndRegister} className="space-y-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                6-значный код из письма <span className="text-cyan-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                maxLength={6}
-                value={verificationCode}
-                onChange={(e) => setVerificationCode(e.target.value)}
-                placeholder="123456"
-                className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-center font-mono text-lg tracking-widest text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Желаемый никнейм на платформе <span className="text-cyan-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                minLength={3}
-                maxLength={25}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Например: Miracle, Dendi, CyberTitan"
-                className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400 transition"
-              />
-              <span className="text-[10px] text-slate-500 mt-1 block">
-                Steam можно будет привязать в любой момент в личном профиле.
-              </span>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setRegisterStep("credentials")}
-                className="py-2.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
-              >
-                Назад
-              </button>
-              <button
-                type="submit"
-                disabled={loading || !username.trim()}
-                className="flex-1 py-2.5 px-4 rounded-lg bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-sm shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
-              >
-                {loading ? "Создание..." : "Завершить регистрацию"}
-              </button>
-            </div>
           </form>
         )}
 
@@ -372,7 +284,7 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
 
           <button
             type="button"
-            onClick={handleDemoSteamLogin}
+            onClick={() => handleQuickLogin("steam")}
             disabled={loading}
             className="w-full py-2 px-3 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
           >
