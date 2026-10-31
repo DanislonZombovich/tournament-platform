@@ -3,9 +3,6 @@ import crypto from "crypto";
 import { query } from "@/lib/db";
 import { createSessionToken, hashPassword, setSessionCookie, UserSession } from "@/lib/auth";
 
-// Temporary storage for verification codes
-const pendingVerifications = new Map<string, { code: string; expiresAt: number; passwordHash: string }>();
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -31,11 +28,15 @@ export async function POST(req: NextRequest) {
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       const passwordHash = await hashPassword(password);
 
-      pendingVerifications.set(cleanEmail, {
-        code,
-        passwordHash,
-        expiresAt: Date.now() + 15 * 60 * 1000, // 15 mins
-      });
+      await query(
+        `INSERT INTO email_verifications (email, code, password_hash, expires_at)
+         VALUES ($1, $2, $3, NOW() + INTERVAL '15 minutes')
+         ON CONFLICT (email) DO UPDATE SET
+           code = EXCLUDED.code,
+           password_hash = EXCLUDED.password_hash,
+           expires_at = EXCLUDED.expires_at`,
+        [cleanEmail, code, passwordHash]
+      );
 
       return NextResponse.json({
         success: true,
@@ -59,13 +60,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Никнейм должен быть от 3 символов" }, { status: 400 });
       }
 
-      const pending = pendingVerifications.get(cleanEmail);
-      if (!pending) {
+      const pendingRes = await query<{ code: string; password_hash: string; expires_at: string | Date }>(
+        `SELECT code, password_hash, expires_at FROM email_verifications WHERE email = $1`,
+        [cleanEmail]
+      );
+
+      if (pendingRes.rows.length === 0) {
         return NextResponse.json({ error: "Код подтверждения не найден или истек. Запросите код заново." }, { status: 400 });
       }
 
-      if (Date.now() > pending.expiresAt) {
-        pendingVerifications.delete(cleanEmail);
+      const pending = pendingRes.rows[0];
+      if (new Date(pending.expires_at).getTime() < Date.now()) {
+        await query(`DELETE FROM email_verifications WHERE email = $1`, [cleanEmail]);
         return NextResponse.json({ error: "Срок действия кода истек" }, { status: 400 });
       }
 
@@ -90,10 +96,10 @@ export async function POST(req: NextRequest) {
       await query(
         `INSERT INTO users (id, username, email, password_hash, role, email_verified, fantasy_tokens)
          VALUES ($1, $2, $3, $4, $5, true, 20)`,
-        [userId, trimmedUser, cleanEmail, pending.passwordHash, role]
+        [userId, trimmedUser, cleanEmail, pending.password_hash, role]
       );
 
-      pendingVerifications.delete(cleanEmail);
+      await query(`DELETE FROM email_verifications WHERE email = $1`, [cleanEmail]);
 
       const sessionUser: UserSession = {
         id: userId,

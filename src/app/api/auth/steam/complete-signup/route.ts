@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanUsername = username.trim();
-    if (!/^[a-zA-Z0-9_\-\.]+$/.test(cleanUsername)) {
+    if (!/^[\p{L}\p{N}_\-\. ]+$/u.test(cleanUsername) || cleanUsername.length > 25) {
       return NextResponse.json(
-        { error: "Никнейм может содержать только латинские буквы, цифры, дефис и подчеркивание" },
+        { error: "Никнейм может содержать только буквы, цифры, пробелы, дефис и подчеркивание (до 25 символов)" },
         { status: 400 }
       );
     }

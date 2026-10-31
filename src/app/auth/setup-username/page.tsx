@@ -12,7 +12,7 @@ function SetupUsernameContent() {
   const token = searchParams.get("token") || "";
 
   const [username, setUsername] = useState(
-    steamName.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 15) || ""
+    steamName.replace(/[^\p{L}\p{N}_\-]/gu, "").slice(0, 20) || ""
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +101,7 @@ function SetupUsernameContent() {
               className="w-full px-3.5 py-2.5 rounded-lg bg-[#0d182e] border border-blue-900/60 text-white placeholder-slate-500 font-bold focus:outline-none focus:border-cyan-400 text-sm transition"
             />
             <span className="text-[10px] text-slate-500 mt-1 block">
-              От 3 до 25 символов (латиница, цифры, дефис, подчеркивание).
+              От 3 до 25 символов (буквы, цифры, пробелы, дефис, подчеркивание).
             </span>
           </div>
 

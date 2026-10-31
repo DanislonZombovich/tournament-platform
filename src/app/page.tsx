@@ -296,7 +296,7 @@ function HomeContent() {
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
                 <span className="text-xs font-extrabold text-cyan-300 uppercase tracking-wider">
-                  Верхняя сетка (Upper Bracket)
+                  {lowerMatches.length > 0 ? "Верхняя сетка (Upper Bracket)" : "Сетка плей-офф (Playoffs Bracket)"}
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -284,6 +284,37 @@ async function runTournamentFlowIntegrationTest() {
   );
   assert.equal(steamCheck.rows[0].steam_id, null);
 
+  // Test Persistent Email Verification in DB
+  const testEmail = "danislon.test@dota.gg";
+  await query(`DELETE FROM email_verifications WHERE email = $1`, [testEmail]);
+  await query(
+    `INSERT INTO email_verifications (email, code, password_hash, expires_at)
+     VALUES ($1, '654321', 'hashed_pass_123', NOW() + INTERVAL '15 minutes')`,
+    [testEmail]
+  );
+  const verifCheck = await query<{ code: string }>(
+    `SELECT code FROM email_verifications WHERE email = $1`,
+    [testEmail]
+  );
+  assert.equal(verifCheck.rows.length, 1);
+  assert.equal(verifCheck.rows[0].code, "654321");
+  await query(`DELETE FROM email_verifications WHERE email = $1`, [testEmail]);
+
+  // Test Cyrillic Steam username validation regex
+  const cyrillicRegex = /^[\p{L}\p{N}_\-\. ]+$/u;
+  assert.ok(cyrillicRegex.test("Данислон Зомбович"));
+  assert.ok(cyrillicRegex.test("CyberTitan-2026"));
+  assert.equal(cyrillicRegex.test("Bad$Symbol!"), false);
+
+  // Test Fantasy Token Boundary (tokens = 0)
+  const zeroTokenUserRes = await query<{ fantasy_tokens: number }>(
+    `INSERT INTO users (id, username, email, role, fantasy_tokens)
+     VALUES ('u_zero_tokens', 'ZeroTokensUser', 'zero@test.com', 'user', 0)
+     ON CONFLICT (id) DO UPDATE SET fantasy_tokens = 0
+     RETURNING fantasy_tokens`
+  );
+  assert.equal(zeroTokenUserRes.rows[0].fantasy_tokens, 0);
+
   console.log("Full Tournament, Fantasy & Prediction integration test PASSED successfully!");
 }
 

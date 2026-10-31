@@ -55,6 +55,12 @@ export async function initDb() {
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS creator_id TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code TEXT;
+      CREATE TABLE IF NOT EXISTS email_verifications (
+        email TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL
+      );
     `;
     if (pool) {
       await pool.query(alterSql);

@@ -104,15 +104,15 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
     window.location.href = "/api/auth/steam/login";
   };
 
-  const handleDemoSteamLogin = async () => {
+  const handleQuickLogin = async (provider: string) => {
     setLoading(true);
     setError(null);
     try {
       const chosenName = (mode === "register" ? username : loginField).trim();
-      const res = await fetch("/api/auth/steam/demo", {
+      const res = await fetch("/api/auth/quick-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: chosenName || undefined }),
+        body: JSON.stringify({ provider, username: chosenName || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Ошибка быстрого входа");
@@ -122,6 +122,10 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDemoSteamLogin = async () => {
+    return handleQuickLogin("steam");
   };
 
   return (
@@ -352,6 +356,27 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
             </svg>
             <span>Войти через Steam OpenID</span>
           </button>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => handleQuickLogin("discord")}
+              disabled={loading}
+              className="py-2 px-3 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/40 text-[#a5b4fc] text-xs font-bold flex items-center justify-center gap-1.5 transition"
+            >
+              <span>🎮</span>
+              <span>Discord</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickLogin("google")}
+              disabled={loading}
+              className="py-2 px-3 rounded-lg bg-red-950/30 hover:bg-red-900/40 border border-red-500/30 text-rose-300 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+            >
+              <span>🌐</span>
+              <span>Google</span>
+            </button>
+          </div>
 
           <button
             type="button"
