@@ -11,26 +11,9 @@ export async function POST(req: NextRequest) {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const steamId = `76561198${Math.floor(10000000 + Math.random() * 90000000)}`;
 
-    let avatar = "https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80";
-    let persona = `Player_${randomSuffix}`;
-    let providerEmail: string | null = null;
-
-    if (provider === "discord") {
-      persona = customUsername?.trim() || `DiscordPlayer_${randomSuffix}`;
-      avatar = `https://api.dicebear.com/7.x/bottts/svg?seed=discord_${randomSuffix}`;
-      providerEmail = `discord_${randomSuffix}@community.gg`;
-    } else if (provider === "google") {
-      persona = customUsername?.trim() || `GoogleUser_${randomSuffix}`;
-      avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=google_${randomSuffix}`;
-      providerEmail = `user_${randomSuffix}@gmail.com`;
-    } else if (provider === "github") {
-      persona = customUsername?.trim() || `GitHubDev_${randomSuffix}`;
-      avatar = `https://api.dicebear.com/7.x/identicon/svg?seed=github_${randomSuffix}`;
-      providerEmail = `dev_${randomSuffix}@github.com`;
-    } else {
-      // steam
-      persona = customUsername?.trim() || (currentUser ? `${currentUser.username}_Steam` : `EsportsPro_${steamId.slice(-4)}`);
-    }
+    const avatar = "https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80";
+    const persona = customUsername?.trim() || (currentUser ? `${currentUser.username}_Steam` : `EsportsPro_${steamId.slice(-4)}`);
+    const providerEmail: string | null = null;
 
     if (currentUser) {
       // Link steam ID if steam provider, or update user

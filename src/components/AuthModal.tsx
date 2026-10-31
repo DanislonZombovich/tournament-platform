@@ -357,27 +357,6 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
             <span>Войти через Steam OpenID</span>
           </button>
 
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("discord")}
-              disabled={loading}
-              className="py-2 px-3 rounded-lg bg-[#5865F2]/20 hover:bg-[#5865F2]/30 border border-[#5865F2]/40 text-[#a5b4fc] text-xs font-bold flex items-center justify-center gap-1.5 transition"
-            >
-              <span>🎮</span>
-              <span>Discord</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickLogin("google")}
-              disabled={loading}
-              className="py-2 px-3 rounded-lg bg-red-950/30 hover:bg-red-900/40 border border-red-500/30 text-rose-300 text-xs font-bold flex items-center justify-center gap-1.5 transition"
-            >
-              <span>🌐</span>
-              <span>Google</span>
-            </button>
-          </div>
-
           <button
             type="button"
             onClick={handleDemoSteamLogin}
