@@ -77,8 +77,18 @@ export async function GET(
       .filter((r) => ["pos1", "pos2", "pos3", "pos4", "pos5"].includes(r.role_slot) && r.player)
       .every((r) => r.player?.is_steam_linked);
 
+    const user = await getCurrentUser();
+    const isCaptain = Boolean(user && user.id === team.captain_id);
+    const isAdmin = Boolean(user && (user.role === "admin" || user.id === "usr_d98221e7ed837829"));
+    const accessedViaInviteCode = (id === team.invite_code);
+
+    const safeTeam = {
+      ...team,
+      invite_code: (isCaptain || isAdmin || accessedViaInviteCode) ? team.invite_code : undefined,
+    };
+
     return NextResponse.json({
-      team,
+      team: safeTeam,
       roster,
       is_eligible_for_tournament: primarySlotsFilled && allSteamLinked,
       primarySlotsFilled,

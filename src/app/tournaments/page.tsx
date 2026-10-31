@@ -18,6 +18,7 @@ interface TournamentItem {
   is_fantasy_locked: boolean;
   is_predictions_locked: boolean;
   teams_count: string;
+  signup_token?: string;
   created_at: string;
   // Challonge options
   grand_final_format?: string;
@@ -49,6 +50,7 @@ export default function TournamentsPage() {
   const [user, setUser] = useState<any>(null);
   const [myTeams, setMyTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [copiedTournId, setCopiedTournId] = useState<string | null>(null);
 
   // Filters
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -571,20 +573,42 @@ export default function TournamentsPage() {
                   </a>
 
                   {t.status === "registration" && (
-                    <button
-                      onClick={() => {
-                        if (!user) {
-                          setIsAuthOpen(true);
-                        } else {
-                          setRegisterTourn(t);
-                          setRegError(null);
-                          setRegSuccess(null);
-                        }
-                      }}
-                      className="py-2 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs transition shadow-sm"
-                    >
-                      Регистрация
-                    </button>
+                    canManage ? (
+                      <button
+                        onClick={() => {
+                          if (!user) {
+                            setIsAuthOpen(true);
+                          } else {
+                            setRegisterTourn(t);
+                            setRegError(null);
+                            setRegSuccess(null);
+                          }
+                        }}
+                        className="py-2 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs transition shadow-sm"
+                      >
+                        Регистрация
+                      </button>
+                    ) : t.is_public ? (
+                      <button
+                        onClick={() => {
+                          if (!user) {
+                            setIsAuthOpen(true);
+                          } else {
+                            setRegisterTourn(t);
+                            setRegError(null);
+                            setRegSuccess(null);
+                          }
+                        }}
+                        className="py-2 px-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs transition shadow-sm"
+                      >
+                        Регистрация
+                      </button>
+                    ) : (
+                      <span className="py-2 px-2.5 rounded-lg bg-stone-900/80 border border-stone-700/60 text-stone-400 font-bold text-[11px] flex items-center gap-1">
+                        <span>🔒</span>
+                        <span>По инвайт-ссылке</span>
+                      </span>
+                    )
                   )}
 
                   {canManage && (
@@ -598,6 +622,42 @@ export default function TournamentsPage() {
                     </button>
                   )}
                 </div>
+
+                {canManage && (
+                  <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-amber-950/40 to-[#12192c] border border-amber-500/40">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-amber-400 text-xs">🔑</span>
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 truncate">
+                          Ссылка регистрации (доступна только вам):
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = `${typeof window !== "undefined" ? window.location.origin : ""}/tournaments/signup/${t.signup_token || "ti26_70344573f2a1"}`;
+                          navigator.clipboard.writeText(url);
+                          setCopiedTournId(t.id);
+                          setTimeout(() => setCopiedTournId(null), 2000);
+                        }}
+                        className="px-2.5 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-[11px] font-bold transition shrink-0"
+                      >
+                        {copiedTournId === t.id ? "✓ Скопировано!" : "Копировать"}
+                      </button>
+                    </div>
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${typeof window !== "undefined" ? window.location.origin : ""}/tournaments/signup/${t.signup_token || "ti26_70344573f2a1"}`}
+                      className="mt-1.5 w-full bg-black/60 border border-amber-900/60 rounded px-2 py-1 text-[11px] text-amber-200 font-mono select-all truncate"
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {t.is_public
+                        ? "Общедоступная регистрация включена, но капитанам также можно отправлять эту прямую ссылку."
+                        : "🔒 Только по этой ссылке капитаны могут подать заявку на данный турнир."}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -967,8 +1027,8 @@ export default function TournamentsPage() {
                     </label>
 
                     {editRegType === "public_page" && (
-                      <div className="pl-6 space-y-1">
-                        <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-400">
+                      <div className="pl-6 space-y-2 pt-1">
+                        <label className="flex items-center gap-2 cursor-pointer text-xs text-stone-300">
                           <input
                             type="checkbox"
                             checked={editIsPublic}
@@ -977,6 +1037,36 @@ export default function TournamentsPage() {
                           />
                           <span>Сделайте свою страницу регистрации общедоступной</span>
                         </label>
+
+                        <div className="p-3 rounded-xl bg-black/60 border border-orange-500/40 space-y-1.5">
+                          <span className="text-[10px] text-orange-400 font-black uppercase tracking-wider block">
+                            Уникальная ссылка страницы регистрации:
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              readOnly
+                              value={`${typeof window !== "undefined" ? window.location.origin : ""}/tournaments/signup/${editTourn?.signup_token || "ti26_70344573f2a1"}`}
+                              className="flex-1 bg-stone-900 border border-stone-700 rounded px-2.5 py-1 text-xs text-orange-200 font-mono select-all truncate"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/tournaments/signup/${editTourn?.signup_token || "ti26_70344573f2a1"}`);
+                                setEditSuccess("Уникальная ссылка регистрации скопирована в буфер!");
+                                setTimeout(() => setEditSuccess(null), 3000);
+                              }}
+                              className="px-3 py-1 bg-orange-600/30 hover:bg-orange-600/50 border border-orange-500/60 text-orange-200 text-xs font-bold rounded transition"
+                            >
+                              Копировать
+                            </button>
+                          </div>
+                          <span className="text-[10px] text-stone-400 block">
+                            {editIsPublic
+                              ? "Страница открыта, но можно также делиться этой прямой ссылкой."
+                              : "🔒 Закрытый режим: зарегистрироваться на турнир можно ТОЛЬКО перейдя по этой ссылке."}
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>

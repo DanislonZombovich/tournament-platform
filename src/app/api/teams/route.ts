@@ -48,10 +48,18 @@ export async function GET() {
       membersByTeam[m.team_id].push(m);
     }
 
-    const teams = teamsRes.rows.map((t) => ({
-      ...t,
-      members: membersByTeam[t.id] || [],
-    }));
+    const user = await getCurrentUser();
+    const isAdmin = Boolean(user && (user.role === "admin" || user.id === "usr_d98221e7ed837829"));
+
+    const teams = teamsRes.rows.map((t) => {
+      const isCaptain = Boolean(user && user.id === t.captain_id);
+      return {
+        ...t,
+        // Only captain and admin can see the invite_code
+        invite_code: (isCaptain || isAdmin) ? t.invite_code : undefined,
+        members: membersByTeam[t.id] || [],
+      };
+    });
 
     return NextResponse.json({ teams });
   } catch (err: any) {

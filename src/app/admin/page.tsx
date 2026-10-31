@@ -335,6 +335,40 @@ function AdminContent() {
         </div>
       </div>
 
+      {/* TOURNAMENT SIGNUP SECRET LINK */}
+      {tournament && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#091122] border border-amber-500/40 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-amber-400 text-sm">🔑</span>
+              <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                Уникальная ссылка регистрации на «{tournament.title}» (доступна только вам)
+              </span>
+            </div>
+            <input
+              type="text"
+              readOnly
+              value={`${typeof window !== "undefined" ? window.location.origin : ""}/tournaments/signup/${tournament.signup_token || "ti26_70344573f2a1"}`}
+              className="mt-1.5 w-full bg-black/70 border border-amber-900/70 rounded px-2.5 py-1 text-xs text-amber-200 font-mono select-all truncate"
+            />
+            <p className="text-[10px] text-slate-400 mt-1">
+              Регистрация закрыта от посторонних. Передайте эту ссылку капитанам команд, которых вы приглашаете в сетку.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(`${window.location.origin}/tournaments/signup/${tournament.signup_token || "ti26_70344573f2a1"}`);
+              setMessage({ text: "Уникальная ссылка для регистрации участников скопирована в буфер!", type: "success" });
+              setTimeout(() => setMessage(null), 3000);
+            }}
+            className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold transition shrink-0 self-start sm:self-center shadow-sm"
+          >
+            Скопировать ссылку
+          </button>
+        </div>
+      )}
+
       {/* Hero Header */}
       <div className="relative rounded-2xl p-6 sm:p-8 bg-gradient-to-r from-[#091325] via-[#0d1c3a] to-[#070e1c] border border-blue-500/40 shadow-2xl shadow-blue-500/10">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">

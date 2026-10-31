@@ -8,6 +8,44 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const requestedId = searchParams.get("id") || searchParams.get("tournament_id");
+    const signupToken = searchParams.get("signup_token");
+
+    // Dedicated lookup by unique signup_token for invited teams
+    if (signupToken) {
+      const tokenTournRes = await query<any>(
+        `SELECT t.*, 
+                (SELECT COUNT(*) FROM tournament_teams tt WHERE tt.tournament_id = t.id) AS teams_count
+         FROM tournaments t
+         WHERE t.signup_token = $1`,
+        [signupToken.trim()]
+      );
+
+      if (tokenTournRes.rows.length === 0) {
+        return NextResponse.json({ error: "Недействительная или устаревшая ссылка регистрации на турнир" }, { status: 404 });
+      }
+
+      const targetTourn = tokenTournRes.rows[0];
+      const teamsRes = await query<{
+        team_id: string;
+        name: string;
+        tag: string;
+        logo_url: string;
+        seed: number | null;
+      }>(
+        `SELECT t.id AS team_id, t.name, t.tag, t.logo_url, tt.seed
+         FROM tournament_teams tt
+         JOIN teams t ON t.id = tt.team_id
+         WHERE tt.tournament_id = $1
+         ORDER BY tt.seed ASC NULLS LAST, tt.created_at ASC`,
+        [targetTourn.id]
+      );
+
+      return NextResponse.json({
+        tournament: targetTourn,
+        registered_teams: teamsRes.rows,
+        valid_signup_token: signupToken.trim(),
+      });
+    }
 
     // Fetch all tournaments for the list/selector
     const allTournamentsRes = await query<{
@@ -18,9 +56,11 @@ export async function GET(req: NextRequest) {
       max_teams: number;
       is_public: boolean;
       access_code: string | null;
+      signup_token?: string | null;
       prize_pool: string | null;
       banner_url: string | null;
       status: string;
+      creator_id?: string | null;
       is_fantasy_locked: boolean;
       is_predictions_locked: boolean;
       created_at: string;
@@ -96,9 +136,36 @@ export async function GET(req: NextRequest) {
       matches = matchesRes.rows;
     }
 
+    const user = await getCurrentUser();
+    const isAdmin = Boolean(user && (user.role === "admin" || user.id === "usr_d98221e7ed837829"));
+
+    const sanitizedTournaments = tournamentsList.map((t) => {
+      const isCreator = Boolean(user && t.creator_id && user.id === t.creator_id);
+      if (!isAdmin && !isCreator) {
+        return {
+          ...t,
+          signup_token: null,
+          access_code: null,
+        };
+      }
+      return t;
+    });
+
+    let sanitizedActive: any = activeTournament;
+    if (activeTournament) {
+      const isCreator = Boolean(user && activeTournament.creator_id && user.id === activeTournament.creator_id);
+      if (!isAdmin && !isCreator) {
+        sanitizedActive = {
+          ...activeTournament,
+          signup_token: null,
+          access_code: null,
+        };
+      }
+    }
+
     return NextResponse.json({
-      tournament: activeTournament,
-      tournaments: tournamentsList,
+      tournament: sanitizedActive,
+      tournaments: sanitizedTournaments,
       registered_teams: registeredTeams,
       matches,
     });
@@ -168,6 +235,8 @@ export async function POST(req: NextRequest) {
       const cleanDesc = description ? description.trim() : `Турнир по Dota 2: ${cleanTitle}`;
       const numMaxTeams = Number(participant_cap || max_teams) || 8;
 
+      const signupToken = "ti26_" + crypto.randomBytes(6).toString("hex");
+
       await query(
         `INSERT INTO tournaments (
           id, title, description, format, max_teams, is_public, access_code, prize_pool, banner_url, creator_id, status,
@@ -176,11 +245,12 @@ export async function POST(req: NextRequest) {
           start_time, start_time_tentative, open_voting_all, predictions_bracket, predict_lower_bracket,
           prediction_scoring_type, allow_predictions_pre_tournament,
           exp_shareable_images, exp_require_verified_emails, exp_allow_specific_countries, exp_custom_prediction_fields,
-          initial_rerolls
+          initial_rerolls, signup_token
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'registration',
           $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
-          $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32
+          $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+          $33, $34
         )`,
         [
           tournamentId,
@@ -215,6 +285,7 @@ export async function POST(req: NextRequest) {
           Boolean(exp_allow_specific_countries),
           Boolean(exp_custom_prediction_fields),
           Number(initial_rerolls) || 20,
+          signupToken,
         ]
       );
 
@@ -239,7 +310,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Action: REGISTER TEAM TO TOURNAMENT
-    const { team_id, tournament_id = "ti-2026-main", access_code } = body;
+    const { team_id, tournament_id = "ti-2026-main", access_code, signup_token } = body;
     if (!team_id) {
       return NextResponse.json({ error: "Укажите команду" }, { status: 400 });
     }
@@ -265,8 +336,10 @@ export async function POST(req: NextRequest) {
       max_teams: number;
       is_public: boolean;
       access_code: string | null;
+      signup_token: string | null;
+      creator_id: string | null;
     }>(
-      `SELECT id, title, status, max_teams, is_public, access_code FROM tournaments WHERE id = $1`,
+      `SELECT id, title, status, max_teams, is_public, access_code, signup_token, creator_id FROM tournaments WHERE id = $1`,
       [tournament_id]
     );
 
@@ -279,9 +352,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Регистрация на турнир уже закрыта" }, { status: 400 });
     }
 
-    if (!tournament.is_public && tournament.access_code) {
-      if (tournament.access_code !== access_code) {
-        return NextResponse.json({ error: "Неверный код доступа для закрытого турнира" }, { status: 403 });
+    const isAdminOrCreator = Boolean(
+      user.role === "admin" ||
+      user.id === "usr_d98221e7ed837829" ||
+      (tournament.creator_id && user.id === tournament.creator_id)
+    );
+
+    // Private / closed registration rule: only via unique link (signup_token)
+    if (!tournament.is_public && !isAdminOrCreator) {
+      const providedToken = (signup_token || access_code || "").trim();
+      const validToken = (tournament.signup_token || tournament.access_code || "").trim();
+
+      if (!providedToken) {
+        return NextResponse.json(
+          { error: "Регистрация на данный турнир закрыта и доступна только по уникальной ссылке от организатора" },
+          { status: 403 }
+        );
+      }
+
+      if (providedToken !== validToken) {
+        return NextResponse.json(
+          { error: "Недействительная ссылка регистрации на данный турнир" },
+          { status: 403 }
+        );
       }
     }
 
@@ -376,6 +469,7 @@ async function handleTournamentUpdate(user: any, body: any) {
     max_teams,
     is_public,
     access_code,
+    signup_token,
     prize_pool,
     banner_url,
     status,
@@ -445,6 +539,7 @@ async function handleTournamentUpdate(user: any, body: any) {
     exp_allow_specific_countries: boolean;
     exp_custom_prediction_fields: boolean;
     initial_rerolls: number;
+    signup_token: string | null;
   }>("SELECT * FROM tournaments WHERE id = $1", [id]);
 
   if (tournRes.rows.length === 0) {
@@ -500,6 +595,9 @@ async function handleTournamentUpdate(user: any, body: any) {
   const updatedExpCountries = exp_allow_specific_countries !== undefined ? Boolean(exp_allow_specific_countries) : current.exp_allow_specific_countries;
   const updatedExpFields = exp_custom_prediction_fields !== undefined ? Boolean(exp_custom_prediction_fields) : current.exp_custom_prediction_fields;
   const updatedRerolls = initial_rerolls !== undefined ? Number(initial_rerolls) : (current.initial_rerolls || 20);
+  const updatedSignupToken = signup_token !== undefined
+    ? (signup_token ? signup_token.trim() : null)
+    : (current.signup_token || ("ti26_" + crypto.randomBytes(6).toString("hex")));
 
   await query(
     `UPDATE tournaments SET
@@ -535,8 +633,9 @@ async function handleTournamentUpdate(user: any, body: any) {
       exp_require_verified_emails = $30,
       exp_allow_specific_countries = $31,
       exp_custom_prediction_fields = $32,
-      initial_rerolls = $33
-     WHERE id = $34`,
+      initial_rerolls = $33,
+      signup_token = $34
+     WHERE id = $35`,
     [
       updatedTitle,
       updatedDesc,
@@ -571,6 +670,7 @@ async function handleTournamentUpdate(user: any, body: any) {
       updatedExpCountries,
       updatedExpFields,
       updatedRerolls,
+      updatedSignupToken,
       id,
     ]
   );

@@ -38,6 +38,7 @@ export default function TeamsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [updatingSlot, setUpdatingSlot] = useState(false);
+  const [copiedTeamId, setCopiedTeamId] = useState<string | null>(null);
 
   const handleSlotChange = async (teamId: string, targetUserId: string, newRoleSlot: string) => {
     setUpdatingSlot(true);
@@ -393,24 +394,46 @@ export default function TeamsPage() {
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-blue-900/60 flex items-center justify-between gap-2">
-                <div className="flex flex-col flex-1 min-w-0">
-                  <span className="text-[10px] text-slate-500 uppercase font-bold">Ссылка-приглашение в состав</span>
-                  <input
-                    type="text"
-                    readOnly
-                    value={inviteUrl}
-                    className="mt-0.5 bg-black/40 border border-blue-900/50 rounded px-2 py-1 text-[11px] text-slate-300 font-mono select-all truncate"
-                  />
-                </div>
+              {canManage && team.invite_code ? (
+                <div className="pt-3 border-t border-blue-900/60">
+                  <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs">🔒</span>
+                        <span className="text-[10px] text-cyan-300 font-black uppercase tracking-wider">
+                          Инвайт-ссылка капитана (видна только вам)
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        readOnly
+                        value={inviteUrl}
+                        className="mt-1 w-full bg-black/60 border border-cyan-900/80 rounded px-2.5 py-1 text-[11px] text-cyan-200 font-mono select-all truncate"
+                      />
+                      <span className="text-[10px] text-slate-400 block mt-1">
+                        Только по этой ссылке игроки могут вступить в ваш состав. Общедоступной кнопки вступления нет.
+                      </span>
+                    </div>
 
-                <a
-                  href={`/teams/join/${team.invite_code}`}
-                  className="px-3.5 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/40 text-cyan-300 text-xs font-black uppercase tracking-wider transition shrink-0 self-end"
-                >
-                  Вступить →
-                </a>
-              </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteUrl);
+                        setCopiedTeamId(team.id);
+                        setTimeout(() => setCopiedTeamId(null), 2000);
+                      }}
+                      className="px-3.5 py-2 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-400/50 text-cyan-200 text-xs font-bold transition shrink-0 self-start sm:self-center shadow-sm"
+                    >
+                      {copiedTeamId === team.id ? "✓ Скопировано!" : "Копировать"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-2.5 border-t border-blue-950/80 flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Вступление в состав только по ссылке капитана</span>
+                  <span className="font-mono text-[10px] text-slate-600">Состав: {totalMembers}/7</span>
+                </div>
+              )}
             </div>
           );
         })}

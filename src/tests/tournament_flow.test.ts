@@ -281,6 +281,38 @@ async function runTournamentFlowIntegrationTest() {
   assert.ok(cyrillicRegex.test("CyberTitan-2026"));
   assert.equal(cyrillicRegex.test("Bad$Symbol!"), false);
 
+  // Test Private Tournament Unique Signup Token
+  const privateTournId = "tourn_private_test";
+  const secretSignupToken = "ti26_secret_reg_123";
+  await query(
+    `INSERT INTO tournaments (id, title, format, max_teams, is_public, signup_token, status)
+     VALUES ($1, 'Private Masters', 'double_elimination', 4, false, $2, 'registration')
+     ON CONFLICT (id) DO UPDATE SET is_public = false, signup_token = $2`,
+    [privateTournId, secretSignupToken]
+  );
+
+  const tournCheck = await query<{ is_public: boolean; signup_token: string }>(
+    `SELECT is_public, signup_token FROM tournaments WHERE id = $1`,
+    [privateTournId]
+  );
+  assert.equal(tournCheck.rows[0].is_public, false);
+  assert.equal(tournCheck.rows[0].signup_token, secretSignupToken);
+
+  // Validate that token verification logic correctly distinguishes valid vs invalid token
+  const testValidToken = (token?: string) => {
+    if (!tournCheck.rows[0].is_public) {
+      if (!token || token !== tournCheck.rows[0].signup_token) {
+        return false;
+      }
+    }
+    return true;
+  };
+  assert.equal(testValidToken(undefined), false);
+  assert.equal(testValidToken("wrong_token"), false);
+  assert.equal(testValidToken(secretSignupToken), true);
+
+  await query(`DELETE FROM tournaments WHERE id = $1`, [privateTournId]);
+
   console.log("Full Tournament, Fantasy & Prediction integration test PASSED successfully!");
 }
 

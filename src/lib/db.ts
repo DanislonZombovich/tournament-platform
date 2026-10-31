@@ -77,6 +77,7 @@ export async function initDb() {
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS exp_allow_specific_countries BOOLEAN DEFAULT FALSE;
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS exp_custom_prediction_fields BOOLEAN DEFAULT FALSE;
       ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS initial_rerolls INTEGER DEFAULT 20;
+      ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS signup_token TEXT UNIQUE;
 
       ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code TEXT;

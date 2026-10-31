@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS tournaments (
   exp_allow_specific_countries BOOLEAN DEFAULT FALSE,
   exp_custom_prediction_fields BOOLEAN DEFAULT FALSE,
   initial_rerolls INTEGER DEFAULT 20,
+  signup_token TEXT UNIQUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
