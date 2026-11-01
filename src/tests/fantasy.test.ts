@@ -5,6 +5,7 @@ import {
   calculateFantasyPoints,
   calculateGameFantasyPoints,
   DEFAULT_ROLE_EMBLEMS,
+  extractEmblemIds,
   PlayerStats,
   VALVE_FANTASY_EMBLEMS,
 } from "../lib/fantasy";
@@ -162,6 +163,58 @@ function testDefaultRoleEmblems() {
   assert.ok(DEFAULT_ROLE_EMBLEMS.pos5.length === 3);
 }
 
+function testExtractEmblemIds() {
+  const fromArray = extractEmblemIds(["creepScore", "kills", "towerKills"]);
+  assert.deepEqual(fromArray, ["creepScore", "kills", "towerKills"]);
+
+  const fromJsonString = extractEmblemIds('["gpm", "stuns", "runes"]');
+  assert.deepEqual(fromJsonString, ["gpm", "stuns", "runes"]);
+
+  const fromLegacyTraits = extractEmblemIds(null, [
+    { id: "campsStacked", bonus: 100 },
+    { id: "lotuses", bonus: 100 },
+    { id: "watchers", bonus: 100 },
+  ]);
+  assert.deepEqual(fromLegacyTraits, ["campsStacked", "lotuses", "watchers"]);
+
+  // Deduplication & fallback when fewer than 3
+  const deduplicated = extractEmblemIds(["creepScore", "creepScore"], null, "pos1");
+  assert.equal(deduplicated.length, 3);
+  assert.equal(deduplicated[0], "creepScore");
+  assert.equal(new Set(deduplicated).size, 3);
+
+  // Fallback defaults when empty
+  const defaults = extractEmblemIds(null, null, "pos5");
+  assert.deepEqual(defaults, DEFAULT_ROLE_EMBLEMS.pos5);
+}
+
+function testTeamfightPercentageScaling() {
+  const decimalScore = calculateEmblemPoints("teamfight", { teamfight_pct: 0.75 });
+  const percentScore = calculateEmblemPoints("teamfight", { teamfight_pct: 75 });
+  assert.equal(decimalScore, Math.round(0.75 * 2124));
+  assert.equal(percentScore, Math.round(0.75 * 2124));
+
+  const maxDecimalScore = calculateEmblemPoints("teamfight", { teamfight_pct: 1.0 });
+  const maxPercentScore = calculateEmblemPoints("teamfight", { teamfight_pct: 100 });
+  assert.equal(maxDecimalScore, 2124);
+  assert.equal(maxPercentScore, 2124);
+
+  const zeroScore = calculateEmblemPoints("teamfight", { teamfight_pct: 0 });
+  assert.equal(zeroScore, 0);
+}
+
+function testEmblemValidationRules() {
+  const validateEmblems = (emblems: any): boolean => {
+    return Array.isArray(emblems) && emblems.length === 3 && new Set(emblems).size === 3 && emblems.every((id) => Boolean(VALVE_FANTASY_EMBLEMS[id]));
+  };
+
+  assert.equal(validateEmblems(["creepScore", "deaths", "gpm"]), true);
+  assert.equal(validateEmblems(["creepScore", "creepScore", "gpm"]), false); // duplicates rejected
+  assert.equal(validateEmblems(["creepScore", "gpm"]), false); // only 2 rejected
+  assert.equal(validateEmblems(["creepScore", "gpm", "deaths", "kills"]), false); // 4 rejected
+  assert.equal(validateEmblems(["creepScore", "non_existent_emblem", "gpm"]), false); // invalid id rejected
+}
+
 function runAll() {
   console.log("Running Valve fantasy unit tests...");
   testAll18EmblemsExist();
@@ -170,6 +223,9 @@ function runAll() {
   testThreeEmblemsSelection();
   testBestGameRuleMultipleGames();
   testDefaultRoleEmblems();
+  testExtractEmblemIds();
+  testTeamfightPercentageScaling();
+  testEmblemValidationRules();
   console.log("All Valve fantasy unit tests passed! [OK]");
 }
 

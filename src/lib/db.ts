@@ -98,6 +98,9 @@ export async function initDb() {
       ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS teamfight_pct REAL DEFAULT 0.6;
       ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS tormentor_kills INTEGER DEFAULT 0;
       ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS courier_kills INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS game_number INTEGER DEFAULT 1;
+      ALTER TABLE match_player_stats DROP CONSTRAINT IF EXISTS uq_match_player;
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_match_player_game ON match_player_stats(match_id, player_id, game_number);
 
       CREATE TABLE IF NOT EXISTS tournament_user_tokens (
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

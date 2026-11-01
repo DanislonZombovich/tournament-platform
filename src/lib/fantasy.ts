@@ -306,6 +306,50 @@ export const DEFAULT_ROLE_EMBLEMS: Record<string, string[]> = {
   pos5: ["obsPlaced", "teamfight", "watchers"],
 };
 
+export function extractEmblemIds(rawEmblems: any, rawTraits?: any, defaultRoleSlot?: string): string[] {
+  const ids: string[] = [];
+
+  const parseItem = (val: any) => {
+    if (!val) return;
+    if (typeof val === "string") {
+      try {
+        const parsed = JSON.parse(val);
+        parseItem(parsed);
+      } catch {
+        if (VALVE_FANTASY_EMBLEMS[val] && !ids.includes(val)) ids.push(val);
+      }
+    } else if (Array.isArray(val)) {
+      for (const el of val) {
+        if (typeof el === "string" && VALVE_FANTASY_EMBLEMS[el] && !ids.includes(el)) {
+          ids.push(el);
+        } else if (typeof el === "object" && el?.id && VALVE_FANTASY_EMBLEMS[el.id] && !ids.includes(el.id)) {
+          ids.push(el.id);
+        }
+      }
+    } else if (typeof val === "object" && val?.id && VALVE_FANTASY_EMBLEMS[val.id] && !ids.includes(val.id)) {
+      ids.push(val.id);
+    }
+  };
+
+  parseItem(rawEmblems);
+  if (ids.length === 0 && rawTraits) {
+    parseItem(rawTraits);
+  }
+
+  let finalIds = Array.from(new Set(ids)).slice(0, 3);
+  const fallbackSlot = defaultRoleSlot && DEFAULT_ROLE_EMBLEMS[defaultRoleSlot] ? defaultRoleSlot : "pos1";
+  const defaults = DEFAULT_ROLE_EMBLEMS[fallbackSlot] || ["creepScore", "deaths", "towerKills"];
+
+  for (const defId of defaults) {
+    if (finalIds.length >= 3) break;
+    if (!finalIds.includes(defId)) {
+      finalIds.push(defId);
+    }
+  }
+
+  return finalIds.slice(0, 3);
+}
+
 export function calculateEmblemPoints(emblemId: string, stats: Partial<PlayerStats>): number {
   const emblem = VALVE_FANTASY_EMBLEMS[emblemId];
   if (!emblem) return 0;
@@ -349,11 +393,15 @@ export function calculateEmblemPoints(emblemId: string, stats: Partial<PlayerSta
       baseScore = (Number(stats.smokes) || 0) * 293;
       break;
     case "teamfight": {
-      const tfPct = typeof stats.teamfight_pct === "number"
-        ? Math.min(1, Math.max(0, stats.teamfight_pct))
-        : ((Number(stats.assists) || 0) > 0
-            ? Math.min(1, ((Number(stats.kills) || 0) + (Number(stats.assists) || 0)) / Math.max(1, ((Number(stats.kills) || 0) + (Number(stats.assists) || 0)) * 1.4))
-            : 0.6);
+      let rawTf = stats.teamfight_pct;
+      let tfPct = 0.6;
+      if (typeof rawTf === "number" && !isNaN(rawTf)) {
+        if (rawTf > 1) rawTf = rawTf / 100;
+        tfPct = Math.min(1, Math.max(0, rawTf));
+      } else if ((Number(stats.kills) || 0) + (Number(stats.assists) || 0) > 0) {
+        const total = (Number(stats.kills) || 0) + (Number(stats.assists) || 0);
+        tfPct = Math.min(1, total / Math.max(1, total * 1.4));
+      }
       baseScore = Math.round(tfPct * 2124);
       break;
     }

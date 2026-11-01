@@ -153,14 +153,15 @@ async function runTournamentFlowIntegrationTest() {
   assert.ok(calculatedPoints > 30);
 
   await query(
-    `INSERT INTO match_player_stats (id, match_id, player_id, role_slot, kills, deaths, assists, last_hits, denies, gpm, wards_placed, wards_destroyed, tower_kills, roshan_kills, first_blood, stuns, raw_fantasy_points)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-     ON CONFLICT (match_id, player_id) DO UPDATE SET kills = EXCLUDED.kills, raw_fantasy_points = EXCLUDED.raw_fantasy_points`,
+    `INSERT INTO match_player_stats (id, match_id, player_id, role_slot, game_number, kills, deaths, assists, last_hits, denies, gpm, wards_placed, wards_destroyed, tower_kills, roshan_kills, first_blood, stuns, raw_fantasy_points)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+     ON CONFLICT (match_id, player_id, game_number) DO UPDATE SET kills = EXCLUDED.kills, raw_fantasy_points = EXCLUDED.raw_fantasy_points`,
     [
       "mps_test_1",
       "m_ub1",
       chosenCarryPlayerId,
       "pos1",
+      1,
       mStats.kills,
       mStats.deaths,
       mStats.assists,
@@ -176,16 +177,6 @@ async function runTournamentFlowIntegrationTest() {
       calculatedPoints,
     ]
   );
-
-  await query(
-    `UPDATE fantasy_cards SET points_earned = points_earned + $1 WHERE tournament_id = $2 AND role_slot = 'pos1' AND selected_player_id = $3`,
-    [calculatedPoints, tournamentId, chosenCarryPlayerId]
-  );
-
-  const cardCheck = await query<{ points_earned: number }>(
-    `SELECT points_earned FROM fantasy_cards WHERE id = 'fc_test_pos1'`
-  );
-  assert.equal(cardCheck.rows[0].points_earned, calculatedPoints);
 
   const mStatsGame2 = {
     kills: 22,
@@ -203,9 +194,57 @@ async function runTournamentFlowIntegrationTest() {
   };
   const g1Pts = calculateFantasyPoints(mStats, ["creepScore", "deaths", "towerKills"]);
   const g2Pts = calculateFantasyPoints(mStatsGame2, ["creepScore", "deaths", "towerKills"]);
-  const bestResult = calculateBestGameFantasyPoints([mStats, mStatsGame2], ["creepScore", "deaths", "towerKills"]);
+
+  await query(
+    `INSERT INTO match_player_stats (id, match_id, player_id, role_slot, game_number, kills, deaths, assists, last_hits, denies, gpm, wards_placed, wards_destroyed, tower_kills, roshan_kills, first_blood, stuns, raw_fantasy_points)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+     ON CONFLICT (match_id, player_id, game_number) DO UPDATE SET kills = EXCLUDED.kills, raw_fantasy_points = EXCLUDED.raw_fantasy_points`,
+    [
+      "mps_test_2",
+      "m_ub1",
+      chosenCarryPlayerId,
+      "pos1",
+      2,
+      mStatsGame2.kills,
+      mStatsGame2.deaths,
+      mStatsGame2.assists,
+      mStatsGame2.last_hits,
+      mStatsGame2.denies,
+      mStatsGame2.gpm,
+      mStatsGame2.wards_placed,
+      mStatsGame2.wards_destroyed,
+      mStatsGame2.tower_kills,
+      mStatsGame2.roshan_kills,
+      mStatsGame2.first_blood,
+      mStatsGame2.stuns,
+      g2Pts,
+    ]
+  );
+
+  const playerAllStatsRes = await query<any>(
+    `SELECT mps.* FROM match_player_stats mps
+     JOIN matches m ON m.id = mps.match_id
+     WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2
+     ORDER BY m.match_order ASC, mps.game_number ASC`,
+    [tournamentId, chosenCarryPlayerId]
+  );
+  assert.equal(playerAllStatsRes.rows.length, 2);
+
+  const bestResult = calculateBestGameFantasyPoints(playerAllStatsRes.rows, ["creepScore", "deaths", "towerKills"]);
   assert.ok(g2Pts > g1Pts);
   assert.equal(bestResult.bestScore, g2Pts);
+  assert.equal(bestResult.bestGameIndex, 1);
+  assert.deepEqual(bestResult.gameScores, [g1Pts, g2Pts]);
+
+  await query(
+    `UPDATE fantasy_cards SET points_earned = $1 WHERE tournament_id = $2 AND role_slot = 'pos1' AND selected_player_id = $3`,
+    [bestResult.bestScore, tournamentId, chosenCarryPlayerId]
+  );
+
+  const cardCheck = await query<{ points_earned: number }>(
+    `SELECT points_earned FROM fantasy_cards WHERE id = 'fc_test_pos1'`
+  );
+  assert.equal(cardCheck.rows[0].points_earned, g2Pts);
 
   await query(
     `UPDATE predictions SET points_awarded = 3, is_calculated = true WHERE id = 'pred_test_ub1'`

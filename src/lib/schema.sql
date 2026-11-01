@@ -143,8 +143,9 @@ CREATE TABLE IF NOT EXISTS match_player_stats (
   teamfight_pct REAL DEFAULT 0.6,
   tormentor_kills INTEGER DEFAULT 0,
   courier_kills INTEGER DEFAULT 0,
+  game_number INTEGER DEFAULT 1,
   raw_fantasy_points REAL DEFAULT 0,
-  CONSTRAINT uq_match_player UNIQUE (match_id, player_id)
+  CONSTRAINT uq_match_player_game UNIQUE (match_id, player_id, game_number)
 );
 
 CREATE TABLE IF NOT EXISTS fantasy_cards (

@@ -9,7 +9,6 @@ function ProfileContent() {
   const [user, setUser] = useState<any>(null);
   const [team, setTeam] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [demoLoading, setDemoLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const loadProfile = async () => {
@@ -40,23 +39,6 @@ function ProfileContent() {
 
   const handleSteamRedirect = () => {
     window.location.href = "/api/auth/steam/login";
-  };
-
-  const handleDemoSteamLink = async () => {
-    setDemoLoading(true);
-    try {
-      const res = await fetch("/api/auth/steam/demo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage(data.message || "Steam успешно привязан (Тестовый режим)");
-        await loadProfile();
-      }
-    } finally {
-      setDemoLoading(false);
-    }
   };
 
   if (loading) {
@@ -180,25 +162,15 @@ function ProfileContent() {
           </div>
         ) : (
           <div className="p-4 rounded-xl bg-[#0d1a33] border border-blue-500/30 space-y-3">
-            <div className="flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={handleSteamRedirect}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-[#14233c] hover:bg-[#1a2f52] border border-blue-500/40 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
-              >
-                <svg className="w-4 h-4 fill-current text-cyan-400" viewBox="0 0 24 24">
-                  <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.005.105.005.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.704L.436 15.07C1.829 20.279 6.541 24 12.127 24c6.627 0 12-5.373 12-12S18.605 0 11.979 0z" />
-                </svg>
-                <span>Привязать Steam через OpenID</span>
-              </button>
-
-              <button
-                onClick={handleDemoSteamLink}
-                disabled={demoLoading}
-                className="py-2.5 px-4 rounded-xl bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/30 text-cyan-300 font-bold text-xs transition"
-              >
-                {demoLoading ? "Привязка..." : "⚡ Быстрая тестовая привязка (Mock)"}
-              </button>
-            </div>
+            <button
+              onClick={handleSteamRedirect}
+              className="w-full py-2.5 px-4 rounded-xl bg-[#14233c] hover:bg-[#1a2f52] border border-blue-500/40 text-white font-bold text-xs flex items-center justify-center gap-2 transition"
+            >
+              <svg className="w-4 h-4 fill-current text-cyan-400" viewBox="0 0 24 24">
+                <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.005.105.005.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.704L.436 15.07C1.829 20.279 6.541 24 12.127 24c6.627 0 12-5.373 12-12S18.605 0 11.979 0z" />
+              </svg>
+              <span>Привязать Steam через OpenID</span>
+            </button>
           </div>
         )}
       </div>

@@ -5,6 +5,7 @@ import { query } from "@/lib/db";
 import {
   calculateBestGameFantasyPoints,
   DEFAULT_ROLE_EMBLEMS,
+  extractEmblemIds,
   FantasyEmblem,
   PlayerStats,
   VALVE_FANTASY_EMBLEMS,
@@ -154,33 +155,7 @@ export async function GET(req: NextRequest) {
           };
         }
 
-        let emblemIds: string[] = [];
-        if (Array.isArray(card.emblems) && card.emblems.length > 0) {
-          emblemIds = card.emblems;
-        } else if (typeof card.emblems === "string" && card.emblems !== "[]" && card.emblems.trim() !== "") {
-          try {
-            emblemIds = JSON.parse(card.emblems);
-          } catch {}
-        }
-
-        if (emblemIds.length === 0) {
-          if (typeof card.traits === "string" && card.traits.trim() !== "") {
-            try {
-              const parsed = JSON.parse(card.traits);
-              if (Array.isArray(parsed)) {
-                emblemIds = parsed.map((t: any) => (typeof t === "string" ? t : t.id)).filter(Boolean);
-              }
-            } catch {}
-          } else if (Array.isArray(card.traits)) {
-            emblemIds = card.traits.map((t: any) => (typeof t === "string" ? t : t.id)).filter(Boolean);
-          }
-        }
-
-        if (emblemIds.length === 0) {
-          emblemIds = defaultEmblems;
-        }
-
-        emblemIds = emblemIds.slice(0, 3);
+        const emblemIds = extractEmblemIds(card.emblems, card.traits, slot);
         const emblemDetails: FantasyEmblem[] = emblemIds
           .map((id) => VALVE_FANTASY_EMBLEMS[id])
           .filter(Boolean);
@@ -193,7 +168,8 @@ export async function GET(req: NextRequest) {
           const pStatsRes = await query<PlayerStats>(
             `SELECT mps.* FROM match_player_stats mps
              JOIN matches m ON m.id = mps.match_id
-             WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+             WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2
+             ORDER BY m.match_order ASC, mps.game_number ASC`,
             [tournamentId, card.selected_player_id]
           );
 
@@ -353,14 +329,7 @@ export async function POST(req: NextRequest) {
         );
       } else {
         cardId = cardRes.rows[0].id;
-        const currentEmblems = cardRes.rows[0].emblems;
-        if (Array.isArray(currentEmblems) && currentEmblems.length > 0) {
-          activeEmblemIds = currentEmblems;
-        } else if (typeof currentEmblems === "string" && currentEmblems !== "[]" && currentEmblems.trim() !== "") {
-          try {
-            activeEmblemIds = JSON.parse(currentEmblems);
-          } catch {}
-        }
+        activeEmblemIds = extractEmblemIds(cardRes.rows[0].emblems, cardRes.rows[0].traits, role_slot);
         await query(
           `UPDATE fantasy_cards SET selected_player_id = $1
            WHERE user_id = $2 AND tournament_id = $3 AND role_slot = $4`,
@@ -371,7 +340,8 @@ export async function POST(req: NextRequest) {
       const pStatsRes = await query<PlayerStats>(
         `SELECT mps.* FROM match_player_stats mps
          JOIN matches m ON m.id = mps.match_id
-         WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+         WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2
+         ORDER BY m.match_order ASC, mps.game_number ASC`,
         [tournament_id, player_id]
       );
 
@@ -395,8 +365,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Неверный слот роли" }, { status: 400 });
       }
 
-      if (!Array.isArray(emblems) || emblems.length === 0 || emblems.length > 3) {
-        return NextResponse.json({ error: "Необходимо выбрать от 1 до 3 эмблем" }, { status: 400 });
+      if (!Array.isArray(emblems) || emblems.length !== 3 || new Set(emblems).size !== 3) {
+        return NextResponse.json({ error: "Необходимо выбрать ровно 3 уникальные эмблемы" }, { status: 400 });
       }
 
       const invalidEmblem = emblems.find((id) => !VALVE_FANTASY_EMBLEMS[id]);
@@ -434,7 +404,8 @@ export async function POST(req: NextRequest) {
         const pStatsRes = await query<PlayerStats>(
           `SELECT mps.* FROM match_player_stats mps
            JOIN matches m ON m.id = mps.match_id
-           WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+           WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2
+           ORDER BY m.match_order ASC, mps.game_number ASC`,
           [tournament_id, selectedPlayerId]
         );
 

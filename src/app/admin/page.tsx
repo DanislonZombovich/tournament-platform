@@ -748,9 +748,9 @@ function AdminContent() {
               </div>
 
               <div className="p-3 rounded-xl bg-blue-950/70 border border-blue-500/30 text-xs space-y-1">
-                <span className="font-bold text-cyan-300 block">⚡ Автоматический расчет очков:</span>
+                <span className="font-bold text-cyan-300 block">⚡ Автоматический расчет очков Valve:</span>
                 <p className="text-slate-300 text-[11px]">
-                  При завершении будут сгенерированы реалистичные показатели TI 2026 для всех 10 игроков матча (Kills, Deaths, CS, GPM, Wards, Roshan, FB). Бонусы перекованных карточек пользователей умножат и начислят очки в реальном времени!
+                  При завершении будут сгенерированы официальные показатели Valve для всех 10 игроков по каждой сыгранной карте серии Bo3. Очки пользователям начисляются по 3 выбранным эмблемам за лучшую игру игрока в турнире!
                 </p>
               </div>
 

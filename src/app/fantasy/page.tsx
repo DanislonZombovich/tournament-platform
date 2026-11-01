@@ -138,8 +138,8 @@ function FantasyContent() {
 
   const handleSaveEmblems = async () => {
     if (!activeEmblemModalRole) return;
-    if (tempEmblems.length === 0 || tempEmblems.length > 3) {
-      setMessage({ text: "Выберите от 1 до 3 эмблем", type: "error" });
+    if (tempEmblems.length !== 3) {
+      setMessage({ text: "Необходимо выбрать ровно 3 эмблемы", type: "error" });
       return;
     }
 
@@ -648,7 +648,7 @@ function FantasyContent() {
                   </button>
                   <button
                     onClick={handleSaveEmblems}
-                    disabled={actionLoading || tempEmblems.length === 0 || tempEmblems.length > 3}
+                    disabled={actionLoading || tempEmblems.length !== 3}
                     className="px-5 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-xs font-bold text-white transition shadow-md shadow-cyan-500/20"
                   >
                     {actionLoading ? "Сохранение..." : "Сохранить 3 эмблемы"}

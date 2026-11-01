@@ -1,34 +1,43 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser();
-    const tournamentId = "ti-2026-main";
+    const { searchParams } = new URL(req.url);
+    const tournamentId = searchParams.get("tournament_id") || "ti-2026-main";
 
-    const fantasyPointsRes = await query<{
-      user_id: string;
-      fantasy_points: string;
-    }>(
-      `SELECT user_id, COALESCE(SUM(points_earned), 0) AS fantasy_points
-       FROM fantasy_cards
-       WHERE tournament_id = $1
-       GROUP BY user_id`,
-      [tournamentId]
-    );
+    const fantasyPointsRes =
+      tournamentId === "all"
+        ? await query<{ user_id: string; fantasy_points: string }>(
+            `SELECT user_id, COALESCE(SUM(points_earned), 0) AS fantasy_points
+             FROM fantasy_cards
+             GROUP BY user_id`
+          )
+        : await query<{ user_id: string; fantasy_points: string }>(
+            `SELECT user_id, COALESCE(SUM(points_earned), 0) AS fantasy_points
+             FROM fantasy_cards
+             WHERE tournament_id = $1
+             GROUP BY user_id`,
+            [tournamentId]
+          );
 
-    const predictionPointsRes = await query<{
-      user_id: string;
-      prediction_points: string;
-    }>(
-      `SELECT p.user_id, COALESCE(SUM(p.points_awarded), 0) AS prediction_points
-       FROM predictions p
-       JOIN matches m ON m.id = p.match_id
-       WHERE m.tournament_id = $1
-       GROUP BY p.user_id`,
-      [tournamentId]
-    );
+    const predictionPointsRes =
+      tournamentId === "all"
+        ? await query<{ user_id: string; prediction_points: string }>(
+            `SELECT p.user_id, COALESCE(SUM(p.points_awarded), 0) AS prediction_points
+             FROM predictions p
+             GROUP BY p.user_id`
+          )
+        : await query<{ user_id: string; prediction_points: string }>(
+            `SELECT p.user_id, COALESCE(SUM(p.points_awarded), 0) AS prediction_points
+             FROM predictions p
+             JOIN matches m ON m.id = p.match_id
+             WHERE m.tournament_id = $1
+             GROUP BY p.user_id`,
+            [tournamentId]
+          );
 
     const usersRes = await query<{
       id: string;
@@ -63,7 +72,7 @@ export async function GET() {
       };
     });
 
-    leaderboard.sort((a, b) => b.total_points - a.total_points || b.fantasy_points - a.fantasy_points);
+    leaderboard.sort((a, b) => b.total_points - a.total_points || b.fantasy_points - a.fantasy_points || a.username.localeCompare(b.username));
 
     const rankedLeaderboard = leaderboard.map((item, index) => ({
       ...item,
@@ -78,6 +87,7 @@ export async function GET() {
     return NextResponse.json({
       leaderboard: rankedLeaderboard,
       current_user_rank: currentUserEntry,
+      tournament_id: tournamentId,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
