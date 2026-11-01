@@ -53,10 +53,11 @@ export async function GET() {
 
     const teams = teamsRes.rows.map((t) => {
       const isCaptain = Boolean(user && user.id === t.captain_id);
+      const isMember = Boolean(user && membersByTeam[t.id]?.some((m) => m.user_id === user.id));
       return {
         ...t,
-        // Only captain and admin can see the invite_code
-        invite_code: (isCaptain || isAdmin) ? t.invite_code : undefined,
+        // Captain, team members and admin can see the invite_code and invite players
+        invite_code: (isCaptain || isMember || isAdmin) ? t.invite_code : undefined,
         members: membersByTeam[t.id] || [],
       };
     });

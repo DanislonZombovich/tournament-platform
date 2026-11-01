@@ -40,6 +40,14 @@ export default function TeamsPage() {
   const [updatingSlot, setUpdatingSlot] = useState(false);
   const [copiedTeamId, setCopiedTeamId] = useState<string | null>(null);
 
+  const [editingTeam, setEditingTeam] = useState<TeamItem | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTag, setEditTag] = useState("");
+  const [editLogoUrl, setEditLogoUrl] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
+
   const handleSlotChange = async (teamId: string, targetUserId: string, newRoleSlot: string) => {
     setUpdatingSlot(true);
     setActionMessage(null);
@@ -105,6 +113,89 @@ export default function TeamsPage() {
       setLogoUrl(result);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleOpenEditModal = (team: TeamItem) => {
+    setEditingTeam(team);
+    setEditName(team.name);
+    setEditTag(team.tag);
+    setEditLogoUrl(team.logo_url || "");
+    setEditError(null);
+  };
+
+  const handleEditFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setEditError("Размер файла не должен превышать 2 МБ");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setEditLogoUrl(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSaveTeamEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTeam) return;
+
+    setEditError(null);
+    setEditSubmitting(true);
+
+    try {
+      const res = await fetch(`/api/teams/${editingTeam.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName,
+          tag: editTag,
+          logo_url: editLogoUrl,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка сохранения изменений");
+
+      setActionMessage({ type: "success", text: data.message || "Данные команды успешно обновлены!" });
+      setEditingTeam(null);
+      await loadData();
+      setTimeout(() => setActionMessage(null), 4000);
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleDeleteTeam = async (team: TeamItem) => {
+    if (!confirm(`Вы действительно хотите удалить команду "${team.name}" [${team.tag}]? Все игроки будут освобождены из состава. Это действие необратимо!`)) {
+      return;
+    }
+
+    setDeletingTeamId(team.id);
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/teams/${team.id}?delete_team=true`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка удаления команды");
+
+      setActionMessage({ type: "success", text: data.message || `Команда "${team.name}" удалена.` });
+      await loadData();
+      setTimeout(() => setActionMessage(null), 4000);
+    } catch (err: any) {
+      setActionMessage({ type: "error", text: err.message });
+      setTimeout(() => setActionMessage(null), 5000);
+    } finally {
+      setDeletingTeamId(null);
+    }
   };
 
   const loadData = async () => {
@@ -350,7 +441,7 @@ export default function TeamsPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-col items-end">
+                <div className="flex flex-col items-end gap-1.5">
                   <span
                     className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
                       isEligible
@@ -360,9 +451,33 @@ export default function TeamsPage() {
                   >
                     {isEligible ? "Допущена к турниру" : `Основа: ${filledPrimary}/5`}
                   </span>
-                  <span className="text-[10px] text-slate-400 mt-1">
+                  <span className="text-[10px] text-slate-400">
                     Игроков в ростере: {totalMembers}/7 (Steam: {steamPrimary}/5)
                   </span>
+
+                  {canManage && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(team)}
+                        className="px-2.5 py-1 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 border border-blue-400/40 text-cyan-200 text-[10px] font-bold transition flex items-center gap-1"
+                        title="Изменить название, тег и логотип команды"
+                      >
+                        <span>✏️</span>
+                        <span>Изменить</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTeam(team)}
+                        disabled={deletingTeamId === team.id}
+                        className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900/80 border border-red-500/40 text-red-300 text-[10px] font-bold transition flex items-center gap-1 disabled:opacity-50"
+                        title="Удалить команду целиком (доступно капитану)"
+                      >
+                        <span>🗑️</span>
+                        <span>{deletingTeamId === team.id ? "Удаление..." : "Удалить"}</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -394,14 +509,14 @@ export default function TeamsPage() {
                 </div>
               </div>
 
-              {canManage && team.invite_code ? (
+              {team.invite_code ? (
                 <div className="pt-3 border-t border-blue-900/60">
                   <div className="p-3 rounded-xl bg-cyan-950/40 border border-cyan-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-xs">🔒</span>
+                        <span className="text-xs">🔗</span>
                         <span className="text-[10px] text-cyan-300 font-black uppercase tracking-wider">
-                          Инвайт-ссылка капитана (видна только вам)
+                          Инвайт-ссылка команды (видна капитану и участникам)
                         </span>
                       </div>
                       <input
@@ -411,7 +526,7 @@ export default function TeamsPage() {
                         className="mt-1 w-full bg-black/60 border border-cyan-900/80 rounded px-2.5 py-1 text-[11px] text-cyan-200 font-mono select-all truncate"
                       />
                       <span className="text-[10px] text-slate-400 block mt-1">
-                        Только по этой ссылке игроки могут вступить в ваш состав. Общедоступной кнопки вступления нет.
+                        Вы состоите в команде и можете отправить эту ссылку любому игроку для вступления на свободную роль.
                       </span>
                     </div>
 
@@ -430,7 +545,7 @@ export default function TeamsPage() {
                 </div>
               ) : (
                 <div className="pt-2.5 border-t border-blue-950/80 flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Вступление в состав только по ссылке капитана</span>
+                  <span>Вступление в состав только по ссылке от участников команды</span>
                   <span className="font-mono text-[10px] text-slate-600">Состав: {totalMembers}/7</span>
                 </div>
               )}
@@ -588,6 +703,130 @@ export default function TeamsPage() {
               >
                 {submitting ? "Создание..." : "Создать команду и получить инвайт-код"}
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {editingTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="relative w-full max-w-md bg-[#091122] border border-blue-500/40 rounded-2xl p-6 shadow-2xl shadow-blue-500/20">
+            <button
+              onClick={() => setEditingTeam(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white transition text-lg"
+            >
+              ✕
+            </button>
+
+            <div className="text-center mb-5">
+              <span className="text-xs font-black text-cyan-400 tracking-widest uppercase">Управление командой</span>
+              <h3 className="text-xl font-black text-white mt-1">Редактирование команды</h3>
+              <p className="text-xs text-slate-400 mt-1">Измените название, тег или аватарку команды</p>
+            </div>
+
+            {editError && (
+              <div className="mb-4 p-2.5 rounded bg-red-950/60 border border-red-500/40 text-red-300 text-xs">
+                {editError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveTeamEdit} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Название команды <span className="text-cyan-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Например: Team Liquid"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Тег команды (2-6 символов) <span className="text-cyan-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={6}
+                  value={editTag}
+                  onChange={(e) => setEditTag(e.target.value.toUpperCase())}
+                  placeholder="TL"
+                  className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white uppercase placeholder-slate-500 focus:outline-none focus:border-cyan-400 font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Аватарка / Логотип команды
+                </label>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3">
+                    {editLogoUrl ? (
+                      <div className="w-12 h-12 rounded-lg border border-cyan-400/40 overflow-hidden bg-black/40 flex-shrink-0 flex items-center justify-center p-1">
+                        <img src={editLogoUrl} alt="Превью" className="w-full h-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-blue-900/50 flex items-center justify-center text-slate-500 text-xs font-bold border border-blue-800">
+                        Нет
+                      </div>
+                    )}
+                    <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-950/80 hover:bg-blue-900 border border-cyan-500/40 text-xs font-semibold text-cyan-300 transition-all">
+                      <span>📁 Загрузить с ПК</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleEditFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                    {editLogoUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditLogoUrl("")}
+                        className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                      >
+                        Сбросить
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    value={editLogoUrl.startsWith("data:") ? "Локальное изображение выбрано с ПК" : editLogoUrl}
+                    onChange={(e) => {
+                      if (!editLogoUrl.startsWith("data:")) {
+                        setEditLogoUrl(e.target.value);
+                      }
+                    }}
+                    placeholder="Или вставьте прямую ссылку (https://...)"
+                    className="w-full px-3 py-2 rounded-lg bg-[#0d182e] border border-blue-900/60 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Загрузите изображение с компьютера (до 2 МБ) или укажите ссылку.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTeam(null)}
+                  className="flex-1 py-2.5 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase transition"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="flex-1 py-2.5 px-4 rounded-lg bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white font-extrabold text-xs uppercase tracking-wider shadow-lg shadow-blue-500/20 transition disabled:opacity-50"
+                >
+                  {editSubmitting ? "Сохранение..." : "Сохранить"}
+                </button>
+              </div>
             </form>
           </div>
         </div>

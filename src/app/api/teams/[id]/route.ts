@@ -80,11 +80,12 @@ export async function GET(
     const user = await getCurrentUser();
     const isCaptain = Boolean(user && user.id === team.captain_id);
     const isAdmin = Boolean(user && (user.role === "admin" || user.id === "usr_d98221e7ed837829"));
+    const isMember = Boolean(user && membersRes.rows.some((m) => m.user_id === user.id));
     const accessedViaInviteCode = (id === team.invite_code);
 
     const safeTeam = {
       ...team,
-      invite_code: (isCaptain || isAdmin || accessedViaInviteCode) ? team.invite_code : undefined,
+      invite_code: (isCaptain || isMember || isAdmin || accessedViaInviteCode) ? team.invite_code : undefined,
     };
 
     return NextResponse.json({
@@ -111,17 +112,15 @@ export async function PATCH(
 
     const { id: teamId } = await params;
     const body = await req.json();
-    const { target_user_id, new_role_slot } = body;
-
-    if (!target_user_id || !new_role_slot) {
-      return NextResponse.json({ error: "Укажите игрока и новую роль" }, { status: 400 });
-    }
 
     const teamRes = await query<{
       id: string;
       name: string;
+      tag: string;
+      logo_url: string | null;
+      banner_url: string | null;
       captain_id: string;
-    }>("SELECT id, name, captain_id FROM teams WHERE id = $1", [teamId]);
+    }>("SELECT id, name, tag, logo_url, banner_url, captain_id FROM teams WHERE id = $1", [teamId]);
 
     if (teamRes.rows.length === 0) {
       return NextResponse.json({ error: "Команда не найдена" }, { status: 404 });
@@ -129,7 +128,67 @@ export async function PATCH(
 
     const team = teamRes.rows[0];
     const isCaptain = team.captain_id === user.id;
-    const isAdmin = user.role === "admin";
+    const isAdmin = user.role === "admin" || user.id === "usr_d98221e7ed837829";
+
+    // 1. UPDATE TEAM DETAILS (Name, Tag, Avatar / Logo, Banner)
+    if (
+      body.name !== undefined ||
+      body.tag !== undefined ||
+      body.logo_url !== undefined ||
+      body.banner_url !== undefined
+    ) {
+      if (!isCaptain && !isAdmin) {
+        return NextResponse.json(
+          { error: "Только капитан (создатель) команды может редактировать название и аватарку" },
+          { status: 403 }
+        );
+      }
+
+      const newName = typeof body.name === "string" ? body.name.trim() : team.name;
+      const newTag = typeof body.tag === "string" ? body.tag.trim().toUpperCase() : team.tag;
+      const newLogo = body.logo_url !== undefined ? body.logo_url : team.logo_url;
+      const newBanner = body.banner_url !== undefined ? body.banner_url : team.banner_url;
+
+      if (!newName || newName.length < 2) {
+        return NextResponse.json({ error: "Название команды должно содержать не менее 2 символов" }, { status: 400 });
+      }
+
+      if (!newTag || newTag.length < 2 || newTag.length > 6) {
+        return NextResponse.json({ error: "Тег команды должен содержать от 2 до 6 символов" }, { status: 400 });
+      }
+
+      const conflictRes = await query(
+        `SELECT id FROM teams WHERE (LOWER(name) = LOWER($1) OR UPPER(tag) = $2) AND id != $3`,
+        [newName, newTag, team.id]
+      );
+
+      if (conflictRes.rows.length > 0) {
+        return NextResponse.json(
+          { error: "Команда с таким названием или тегом уже существует" },
+          { status: 409 }
+        );
+      }
+
+      await query(
+        `UPDATE teams 
+         SET name = $1, tag = $2, logo_url = $3, banner_url = $4, updated_at = NOW() 
+         WHERE id = $5`,
+        [newName, newTag, newLogo, newBanner, team.id]
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: "Данные команды успешно обновлены!",
+        team: { ...team, name: newName, tag: newTag, logo_url: newLogo, banner_url: newBanner },
+      });
+    }
+
+    // 2. UPDATE ROLE SLOT
+    const { target_user_id, new_role_slot } = body;
+    if (!target_user_id || !new_role_slot) {
+      return NextResponse.json({ error: "Не указаны параметры обновления" }, { status: 400 });
+    }
+
     const isSelf = target_user_id === user.id;
 
     if (!isCaptain && !isAdmin && !isSelf) {
@@ -236,28 +295,47 @@ export async function DELETE(
 
     const { id: teamId } = await params;
     const { searchParams } = new URL(req.url);
-    const targetUserId = searchParams.get("user_id") || user.id;
+    const deleteTeam = searchParams.get("delete_team") === "true";
+    const targetUserId = searchParams.get("user_id");
 
-    const teamRes = await query<{ id: string; captain_id: string }>(
-      "SELECT id, captain_id FROM teams WHERE id = $1",
+    const teamRes = await query<{ id: string; captain_id: string; name: string }>(
+      "SELECT id, captain_id, name FROM teams WHERE id = $1",
       [teamId]
     );
     if (teamRes.rows.length === 0) return NextResponse.json({ error: "Команда не найдена" }, { status: 404 });
 
     const team = teamRes.rows[0];
     const isCaptain = team.captain_id === user.id;
-    const isAdmin = user.role === "admin";
-    const isSelf = targetUserId === user.id;
+    const isAdmin = user.role === "admin" || user.id === "usr_d98221e7ed837829";
+
+    // 1. DELETE ENTIRE TEAM (Action by Captain or Admin)
+    if (deleteTeam || !targetUserId) {
+      if (!isCaptain && !isAdmin) {
+        return NextResponse.json({ error: "Только капитан (создатель) команды может удалить команду" }, { status: 403 });
+      }
+
+      await query("DELETE FROM team_members WHERE team_id = $1", [team.id]);
+      await query("DELETE FROM tournament_teams WHERE team_id = $1", [team.id]);
+      await query("UPDATE matches SET team1_id = NULL WHERE team1_id = $1", [team.id]);
+      await query("UPDATE matches SET team2_id = NULL WHERE team2_id = $1", [team.id]);
+      await query("DELETE FROM teams WHERE id = $1", [team.id]);
+
+      return NextResponse.json({ success: true, message: `Команда "${team.name}" успешно удалена!` });
+    }
+
+    // 2. KICK SPECIFIC PLAYER
+    const userToKick = targetUserId;
+    const isSelf = userToKick === user.id;
 
     if (!isCaptain && !isAdmin && !isSelf) {
       return NextResponse.json({ error: "У вас нет прав на исключение игроков из команды" }, { status: 403 });
     }
 
-    if (isCaptain && targetUserId === team.captain_id) {
-      return NextResponse.json({ error: "Капитан не может покинуть команду, пока не передаст капитанство" }, { status: 400 });
+    if (isCaptain && userToKick === team.captain_id) {
+      return NextResponse.json({ error: "Капитан не может покинуть команду, пока не передаст капитанство (или удалите команду целиком)" }, { status: 400 });
     }
 
-    await query("DELETE FROM team_members WHERE team_id = $1 AND user_id = $2", [team.id, targetUserId]);
+    await query("DELETE FROM team_members WHERE team_id = $1 AND user_id = $2", [team.id, userToKick]);
 
     return NextResponse.json({ success: true, message: "Игрок удален из состава команды" });
   } catch (err: any) {
