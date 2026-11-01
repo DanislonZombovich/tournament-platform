@@ -17,21 +17,28 @@ export interface MatchEntity {
 }
 
 export const BRACKET_MATCH_DEFINITIONS = [
-  { match_code: "UB1", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 1", match_order: 1 },
-  { match_code: "UB2", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 2", match_order: 2 },
-  { match_code: "LB1", bracket_type: "lower" as const, round_name: "Нижняя сетка — Раунд 1", match_order: 3 },
-  { match_code: "UBF", bracket_type: "upper" as const, round_name: "Верхняя сетка — Финал", match_order: 4 },
-  { match_code: "LBF", bracket_type: "lower" as const, round_name: "Нижняя сетка — Финал", match_order: 5 },
+  { match_code: "UB1", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 1 (Bo3)", match_order: 1 },
+  { match_code: "UB2", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 2 (Bo3)", match_order: 2 },
+  { match_code: "LB1", bracket_type: "lower" as const, round_name: "Нижняя сетка — Раунд 1 (Bo3)", match_order: 3 },
+  { match_code: "UBF", bracket_type: "upper" as const, round_name: "Верхняя сетка — Финал (Bo3)", match_order: 4 },
+  { match_code: "LBF", bracket_type: "lower" as const, round_name: "Нижняя сетка — Финал (Bo3)", match_order: 5 },
   { match_code: "GF", bracket_type: "grand_final" as const, round_name: "Гранд-Финал (Bo3)", match_order: 6 },
 ];
 
 export async function generateMatchesForTournament(
   tournamentId: string,
   format: string = "double_elimination",
-  maxTeams: number = 4
+  maxTeams: number = 4,
+  forceRegenerate: boolean = false
 ) {
-  const existing = await query(`SELECT id FROM matches WHERE tournament_id = $1`, [tournamentId]);
-  if (existing.rows.length > 0) return;
+  if (forceRegenerate) {
+    await query(`DELETE FROM match_player_stats WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
+    await query(`DELETE FROM predictions WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
+    await query(`DELETE FROM matches WHERE tournament_id = $1`, [tournamentId]);
+  } else {
+    const existing = await query(`SELECT id FROM matches WHERE tournament_id = $1`, [tournamentId]);
+    if (existing.rows.length > 0) return;
+  }
 
   const defs: { match_code: string; bracket_type: "upper" | "lower" | "grand_final"; round_name: string; match_order: number }[] = [];
 
@@ -42,36 +49,36 @@ export async function generateMatchesForTournament(
       );
     } else if (maxTeams <= 4) {
       defs.push(
-        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1", match_order: 1 },
-        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2", match_order: 2 },
+        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1 (Bo3)", match_order: 1 },
+        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2 (Bo3)", match_order: 2 },
         { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 3 }
       );
     } else if (maxTeams <= 8) {
       defs.push(
-        { match_code: "QF1", bracket_type: "upper", round_name: "Четвертьфинал 1", match_order: 1 },
-        { match_code: "QF2", bracket_type: "upper", round_name: "Четвертьфинал 2", match_order: 2 },
-        { match_code: "QF3", bracket_type: "upper", round_name: "Четвертьфинал 3", match_order: 3 },
-        { match_code: "QF4", bracket_type: "upper", round_name: "Четвертьфинал 4", match_order: 4 },
-        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1", match_order: 5 },
-        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2", match_order: 6 },
+        { match_code: "QF1", bracket_type: "upper", round_name: "Четвертьфинал 1 (Bo3)", match_order: 1 },
+        { match_code: "QF2", bracket_type: "upper", round_name: "Четвертьфинал 2 (Bo3)", match_order: 2 },
+        { match_code: "QF3", bracket_type: "upper", round_name: "Четвертьфинал 3 (Bo3)", match_order: 3 },
+        { match_code: "QF4", bracket_type: "upper", round_name: "Четвертьфинал 4 (Bo3)", match_order: 4 },
+        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1 (Bo3)", match_order: 5 },
+        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2 (Bo3)", match_order: 6 },
         { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 7 }
       );
     } else {
       defs.push(
-        { match_code: "R16_1", bracket_type: "upper", round_name: "1/8 финала 1", match_order: 1 },
-        { match_code: "R16_2", bracket_type: "upper", round_name: "1/8 финала 2", match_order: 2 },
-        { match_code: "R16_3", bracket_type: "upper", round_name: "1/8 финала 3", match_order: 3 },
-        { match_code: "R16_4", bracket_type: "upper", round_name: "1/8 финала 4", match_order: 4 },
-        { match_code: "R16_5", bracket_type: "upper", round_name: "1/8 финала 5", match_order: 5 },
-        { match_code: "R16_6", bracket_type: "upper", round_name: "1/8 финала 6", match_order: 6 },
-        { match_code: "R16_7", bracket_type: "upper", round_name: "1/8 финала 7", match_order: 7 },
-        { match_code: "R16_8", bracket_type: "upper", round_name: "1/8 финала 8", match_order: 8 },
-        { match_code: "QF1", bracket_type: "upper", round_name: "Четвертьфинал 1", match_order: 9 },
-        { match_code: "QF2", bracket_type: "upper", round_name: "Четвертьфинал 2", match_order: 10 },
-        { match_code: "QF3", bracket_type: "upper", round_name: "Четвертьфинал 3", match_order: 11 },
-        { match_code: "QF4", bracket_type: "upper", round_name: "Четвертьфинал 4", match_order: 12 },
-        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1", match_order: 13 },
-        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2", match_order: 14 },
+        { match_code: "R16_1", bracket_type: "upper", round_name: "1/8 финала 1 (Bo3)", match_order: 1 },
+        { match_code: "R16_2", bracket_type: "upper", round_name: "1/8 финала 2 (Bo3)", match_order: 2 },
+        { match_code: "R16_3", bracket_type: "upper", round_name: "1/8 финала 3 (Bo3)", match_order: 3 },
+        { match_code: "R16_4", bracket_type: "upper", round_name: "1/8 финала 4 (Bo3)", match_order: 4 },
+        { match_code: "R16_5", bracket_type: "upper", round_name: "1/8 финала 5 (Bo3)", match_order: 5 },
+        { match_code: "R16_6", bracket_type: "upper", round_name: "1/8 финала 6 (Bo3)", match_order: 6 },
+        { match_code: "R16_7", bracket_type: "upper", round_name: "1/8 финала 7 (Bo3)", match_order: 7 },
+        { match_code: "R16_8", bracket_type: "upper", round_name: "1/8 финала 8 (Bo3)", match_order: 8 },
+        { match_code: "QF1", bracket_type: "upper", round_name: "Четвертьфинал 1 (Bo3)", match_order: 9 },
+        { match_code: "QF2", bracket_type: "upper", round_name: "Четвертьфинал 2 (Bo3)", match_order: 10 },
+        { match_code: "QF3", bracket_type: "upper", round_name: "Четвертьфинал 3 (Bo3)", match_order: 11 },
+        { match_code: "QF4", bracket_type: "upper", round_name: "Четвертьфинал 4 (Bo3)", match_order: 12 },
+        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1 (Bo3)", match_order: 13 },
+        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2 (Bo3)", match_order: 14 },
         { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 15 }
       );
     }
@@ -79,18 +86,18 @@ export async function generateMatchesForTournament(
     // Double Elimination
     if (maxTeams > 4) {
       defs.push(
-        { match_code: "UB1", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 1", match_order: 1 },
-        { match_code: "UB2", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 2", match_order: 2 },
-        { match_code: "UB3", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 3", match_order: 3 },
-        { match_code: "UB4", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 4", match_order: 4 },
-        { match_code: "UBF1", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 1", match_order: 5 },
-        { match_code: "UBF2", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 2", match_order: 6 },
-        { match_code: "UBF", bracket_type: "upper", round_name: "Верхняя сетка — Финал", match_order: 7 },
-        { match_code: "LB1", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1 (Матч 1)", match_order: 8 },
-        { match_code: "LB2", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1 (Матч 2)", match_order: 9 },
-        { match_code: "LB3", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 2 (Матч 1)", match_order: 10 },
-        { match_code: "LB4", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 2 (Матч 2)", match_order: 11 },
-        { match_code: "LBF", bracket_type: "lower", round_name: "Нижняя сетка — Финал", match_order: 12 },
+        { match_code: "UB1", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 1 (Bo3)", match_order: 1 },
+        { match_code: "UB2", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 2 (Bo3)", match_order: 2 },
+        { match_code: "UB3", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 3 (Bo3)", match_order: 3 },
+        { match_code: "UB4", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 4 (Bo3)", match_order: 4 },
+        { match_code: "UBF1", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 1 (Bo3)", match_order: 5 },
+        { match_code: "UBF2", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 2 (Bo3)", match_order: 6 },
+        { match_code: "UBF", bracket_type: "upper", round_name: "Верхняя сетка — Финал (Bo3)", match_order: 7 },
+        { match_code: "LB1", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1 (Матч 1) (Bo3)", match_order: 8 },
+        { match_code: "LB2", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1 (Матч 2) (Bo3)", match_order: 9 },
+        { match_code: "LB3", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 2 (Матч 1) (Bo3)", match_order: 10 },
+        { match_code: "LB4", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 2 (Матч 2) (Bo3)", match_order: 11 },
+        { match_code: "LBF", bracket_type: "lower", round_name: "Нижняя сетка — Финал (Bo3)", match_order: 12 },
         { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 13 }
       );
     } else {
@@ -98,12 +105,32 @@ export async function generateMatchesForTournament(
     }
   }
 
+  // Check if teams are already registered in the tournament to seed into opening matches
+  const regTeamsRes = await query<{ team_id: string }>(
+    `SELECT team_id FROM tournament_teams WHERE tournament_id = $1 ORDER BY seed ASC NULLS LAST, created_at ASC`,
+    [tournamentId]
+  );
+  const regTeamIds = regTeamsRes.rows.map((r) => r.team_id);
+
   for (const def of defs) {
     const id = "m_" + crypto.randomBytes(8).toString("hex");
+    let team1_id: string | null = null;
+    let team2_id: string | null = null;
+
+    if (maxTeams <= 4) {
+      if ((def.match_code === "UB1" || def.match_code === "SF1") && regTeamIds.length >= 2) {
+        team1_id = regTeamIds[0];
+        team2_id = regTeamIds[1];
+      } else if ((def.match_code === "UB2" || def.match_code === "SF2") && regTeamIds.length >= 4) {
+        team1_id = regTeamIds[2];
+        team2_id = regTeamIds[3];
+      }
+    }
+
     await query(
-      `INSERT INTO matches (id, tournament_id, match_code, bracket_type, round_name, match_order, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
-      [id, tournamentId, def.match_code, def.bracket_type, def.round_name, def.match_order]
+      `INSERT INTO matches (id, tournament_id, match_code, bracket_type, round_name, match_order, status, team1_id, team2_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)`,
+      [id, tournamentId, def.match_code, def.bracket_type, def.round_name, def.match_order, team1_id, team2_id]
     );
   }
 }

@@ -110,11 +110,11 @@ export async function POST(req: NextRequest) {
       if (format === "double_elimination" && teamIds.length <= 4) {
         // Standard 4-team Double Elimination
         const matchesToInsert = [
-          { code: "UB1", type: "upper", name: "Верхняя сетка — Полуфинал 1", t1: teamIds[0], t2: teamIds[1], order: 1 },
-          { code: "UB2", type: "upper", name: "Верхняя сетка — Полуфинал 2", t1: teamIds[2] || null, t2: teamIds[3] || null, order: 2 },
-          { code: "LB1", type: "lower", name: "Нижняя сетка — Раунд 1", t1: null, t2: null, order: 3 },
-          { code: "UBF", type: "upper", name: "Верхняя сетка — Финал", t1: null, t2: null, order: 4 },
-          { code: "LBF", type: "lower", name: "Нижняя сетка — Финал", t1: null, t2: null, order: 5 },
+          { code: "UB1", type: "upper", name: "Верхняя сетка — Полуфинал 1 (Bo3)", t1: teamIds[0], t2: teamIds[1], order: 1 },
+          { code: "UB2", type: "upper", name: "Верхняя сетка — Полуфинал 2 (Bo3)", t1: teamIds[2] || null, t2: teamIds[3] || null, order: 2 },
+          { code: "LB1", type: "lower", name: "Нижняя сетка — Раунд 1 (Bo3)", t1: null, t2: null, order: 3 },
+          { code: "UBF", type: "upper", name: "Верхняя сетка — Финал (Bo3)", t1: null, t2: null, order: 4 },
+          { code: "LBF", type: "lower", name: "Нижняя сетка — Финал (Bo3)", t1: null, t2: null, order: 5 },
           { code: "GF", type: "grand_final", name: "Гранд-Финал (Bo3)", t1: null, t2: null, order: 6 },
         ];
 
