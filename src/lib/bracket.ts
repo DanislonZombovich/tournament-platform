@@ -252,14 +252,102 @@ export function evaluatePredictionPoints(
   predT2: number,
   actualWinnerId: string,
   actualT1: number,
-  actualT2: number
+  actualT2: number,
+  correctStreakIndex: number = 1
 ): number {
   if (predWinnerId !== actualWinnerId) {
     return 0;
   }
-  let points = 5;
+  const multiplier = Math.max(1, correctStreakIndex);
+  let points = multiplier * 500;
   if (predT1 === actualT1 && predT2 === actualT2) {
-    points += 5;
+    points += multiplier * 500;
   }
   return points;
+}
+
+export async function recalculateTournamentPredictions(tournamentId: string) {
+  // Reset uncompleted matches
+  await query(
+    `UPDATE predictions
+     SET points_awarded = 0, is_calculated = false
+     WHERE match_id IN (
+       SELECT id FROM matches WHERE tournament_id = $1 AND status != 'completed'
+     )`,
+    [tournamentId]
+  );
+
+  // Completed matches in order
+  const matchesRes = await query<{
+    id: string;
+    team1_score: number;
+    team2_score: number;
+    winner_id: string;
+    match_order: number;
+  }>(
+    `SELECT id, team1_score, team2_score, winner_id, match_order
+     FROM matches
+     WHERE tournament_id = $1 AND status = 'completed' AND winner_id IS NOT NULL
+     ORDER BY match_order ASC, id ASC`,
+    [tournamentId]
+  );
+
+  if (matchesRes.rows.length === 0) return;
+
+  const matchMap = new Map(matchesRes.rows.map((m) => [m.id, m]));
+
+  // Predictions for completed matches
+  const predsRes = await query<{
+    id: string;
+    user_id: string;
+    match_id: string;
+    predicted_winner_id: string;
+    predicted_team1_score: number;
+    predicted_team2_score: number;
+  }>(
+    `SELECT p.id, p.user_id, p.match_id, p.predicted_winner_id, p.predicted_team1_score, p.predicted_team2_score
+     FROM predictions p
+     JOIN matches m ON m.id = p.match_id
+     WHERE m.tournament_id = $1 AND m.status = 'completed'
+     ORDER BY m.match_order ASC, m.id ASC`,
+    [tournamentId]
+  );
+
+  const userPredsMap = new Map<string, typeof predsRes.rows>();
+  for (const pred of predsRes.rows) {
+    if (!userPredsMap.has(pred.user_id)) {
+      userPredsMap.set(pred.user_id, []);
+    }
+    userPredsMap.get(pred.user_id)!.push(pred);
+  }
+
+  for (const [, preds] of userPredsMap.entries()) {
+    let correctCount = 0;
+    for (const p of preds) {
+      const match = matchMap.get(p.match_id);
+      if (!match) continue;
+
+      if (p.predicted_winner_id === match.winner_id) {
+        correctCount += 1;
+        const pts = evaluatePredictionPoints(
+          p.predicted_winner_id,
+          p.predicted_team1_score,
+          p.predicted_team2_score,
+          match.winner_id,
+          match.team1_score,
+          match.team2_score,
+          correctCount
+        );
+        await query(
+          `UPDATE predictions SET points_awarded = $1, is_calculated = true WHERE id = $2`,
+          [pts, p.id]
+        );
+      } else {
+        await query(
+          `UPDATE predictions SET points_awarded = 0, is_calculated = true WHERE id = $1`,
+          [p.id]
+        );
+      }
+    }
+  }
 }

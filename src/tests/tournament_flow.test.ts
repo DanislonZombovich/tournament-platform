@@ -120,13 +120,13 @@ async function runTournamentFlowIntegrationTest() {
     ["pred_test_ub1", testUserId, "m_ub1", testTeams[0].id]
   );
 
-  const exactPts = evaluatePredictionPoints(testTeams[0].id, 2, 1, testTeams[0].id, 2, 1);
-  assert.equal(exactPts, 10);
+  const exactPts = evaluatePredictionPoints(testTeams[0].id, 2, 1, testTeams[0].id, 2, 1, 1);
+  assert.equal(exactPts, 1000);
 
-  const winnerPts = evaluatePredictionPoints(testTeams[0].id, 2, 0, testTeams[0].id, 2, 1);
-  assert.equal(winnerPts, 5);
+  const winnerPts = evaluatePredictionPoints(testTeams[0].id, 2, 0, testTeams[0].id, 2, 1, 1);
+  assert.equal(winnerPts, 500);
 
-  const wrongPts = evaluatePredictionPoints(testTeams[1].id, 0, 2, testTeams[0].id, 2, 1);
+  const wrongPts = evaluatePredictionPoints(testTeams[1].id, 0, 2, testTeams[0].id, 2, 1, 1);
   assert.equal(wrongPts, 0);
 
   await query(

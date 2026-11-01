@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
-import { advanceDoubleElimination, evaluatePredictionPoints } from "@/lib/bracket";
+import { advanceDoubleElimination, evaluatePredictionPoints, recalculateTournamentPredictions } from "@/lib/bracket";
 import { query } from "@/lib/db";
 import {
   calculateBestGameFantasyPoints,
@@ -333,33 +333,8 @@ export async function POST(req: NextRequest) {
 
     await advanceDoubleElimination(match.tournament_id, match.match_code, winner_id, loserId);
 
-    const predictionsRes = await query<{
-      id: string;
-      user_id: string;
-      predicted_winner_id: string;
-      predicted_team1_score: number;
-      predicted_team2_score: number;
-    }>(
-      `SELECT id, user_id, predicted_winner_id, predicted_team1_score, predicted_team2_score
-       FROM predictions WHERE match_id = $1`,
-      [match.id]
-    );
-
-    for (const p of predictionsRes.rows) {
-      const pts = evaluatePredictionPoints(
-        p.predicted_winner_id,
-        p.predicted_team1_score,
-        p.predicted_team2_score,
-        winner_id,
-        t1s,
-        t2s
-      );
-
-      await query(
-        `UPDATE predictions SET points_awarded = $1, is_calculated = true WHERE id = $2`,
-        [pts, p.id]
-      );
-    }
+    // Recalculate all predictions with progressive linear scoring: 1st: 500 (+500 for score), 2nd: 1000 (+1000), 3rd: 1500 (+1500)...
+    await recalculateTournamentPredictions(match.tournament_id);
 
     const allCardsRes = await query<{
       id: string;

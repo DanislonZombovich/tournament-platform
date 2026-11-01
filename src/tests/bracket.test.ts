@@ -4,20 +4,30 @@ import {
   evaluatePredictionPoints,
   generateMatchesForTournament,
   advanceTournamentBracket,
+  recalculateTournamentPredictions,
 } from "../lib/bracket";
 
 function testEvaluatePredictionPoints() {
-  const ptsExact = evaluatePredictionPoints("teamA", 2, 1, "teamA", 2, 1);
-  assert.equal(ptsExact, 10);
+  // 1st correct match: 500 + 500 for exact score = 1000
+  const ptsExact1 = evaluatePredictionPoints("teamA", 2, 1, "teamA", 2, 1, 1);
+  assert.equal(ptsExact1, 1000);
 
-  const ptsWinnerOnly = evaluatePredictionPoints("teamA", 2, 0, "teamA", 2, 1);
-  assert.equal(ptsWinnerOnly, 5);
+  const ptsWinnerOnly1 = evaluatePredictionPoints("teamA", 2, 0, "teamA", 2, 1, 1);
+  assert.equal(ptsWinnerOnly1, 500);
 
-  const ptsWrongWinner = evaluatePredictionPoints("teamB", 0, 2, "teamA", 2, 1);
+  // 2nd correct match: 1000 + 1000 for exact score = 2000
+  const ptsExact2 = evaluatePredictionPoints("teamA", 2, 1, "teamA", 2, 1, 2);
+  assert.equal(ptsExact2, 2000);
+
+  const ptsWinnerOnly2 = evaluatePredictionPoints("teamA", 2, 0, "teamA", 2, 1, 2);
+  assert.equal(ptsWinnerOnly2, 1000);
+
+  // 3rd correct match: 1500 + 1500 for exact score = 3000
+  const ptsExact3 = evaluatePredictionPoints("teamA", 2, 1, "teamA", 2, 1, 3);
+  assert.equal(ptsExact3, 3000);
+
+  const ptsWrongWinner = evaluatePredictionPoints("teamB", 0, 2, "teamA", 2, 1, 1);
   assert.equal(ptsWrongWinner, 0);
-
-  const ptsSweepExact = evaluatePredictionPoints("teamB", 0, 2, "teamB", 0, 2);
-  assert.equal(ptsSweepExact, 10);
 }
 
 async function testSingleEliminationAdvancement() {
@@ -109,10 +119,66 @@ async function testEightTeamDoubleEliminationAdvancement() {
   assert.equal(lb1Res.rows[0].team1_id, "team_l1");
 }
 
+async function testRecalculateTournamentPredictions() {
+  await initDb();
+  const tournId = "tourn_test_prog_pred";
+  const userId = "user_pred_prog_tester";
+  await query(`DELETE FROM predictions WHERE user_id = $1`, [userId]);
+  await query(`DELETE FROM matches WHERE tournament_id = $1`, [tournId]);
+  await query(`DELETE FROM tournaments WHERE id = $1`, [tournId]);
+  await query(`DELETE FROM users WHERE id = $1`, [userId]);
+
+  await query(
+    `INSERT INTO users (id, username, email, email_verified) VALUES ($1, 'ProgTester', 'prog@test.com', true)`,
+    [userId]
+  );
+  await query(
+    `INSERT INTO tournaments (id, title, format, max_teams, status) VALUES ($1, 'Prog Tourn', 'double_elimination', 8, 'active')`,
+    [tournId]
+  );
+
+  for (const tid of ['teamA', 'teamB', 'teamC', 'teamD', 'teamE', 'teamF']) {
+    await query(
+      `INSERT INTO teams (id, name, tag, invite_code) VALUES ($1, $1, $1, $1) ON CONFLICT (id) DO NOTHING`,
+      [tid]
+    );
+  }
+
+  await query(
+    `INSERT INTO matches (id, tournament_id, match_code, bracket_type, round_name, match_order, status, team1_id, team2_id, team1_score, team2_score, winner_id)
+     VALUES
+     ('m_p1', $1, 'UB1', 'upper', 'UB Round 1', 1, 'completed', 'teamA', 'teamB', 2, 1, 'teamA'),
+     ('m_p2', $1, 'UB2', 'upper', 'UB Round 1', 2, 'completed', 'teamC', 'teamD', 2, 0, 'teamC'),
+     ('m_p3', $1, 'UB3', 'upper', 'UB Round 1', 3, 'completed', 'teamE', 'teamF', 2, 1, 'teamE')`,
+    [tournId]
+  );
+
+  await query(
+    `INSERT INTO predictions (id, user_id, match_id, predicted_winner_id, predicted_team1_score, predicted_team2_score)
+     VALUES
+     ('p1', $1, 'm_p1', 'teamA', 2, 1),
+     ('p2', $1, 'm_p2', 'teamC', 2, 1),
+     ('p3', $1, 'm_p3', 'teamE', 2, 1)`,
+    [userId]
+  );
+
+  await recalculateTournamentPredictions(tournId);
+
+  const res = await query<{ id: string; points_awarded: number; is_calculated: boolean }>(
+    `SELECT id, points_awarded, is_calculated FROM predictions WHERE user_id = $1 ORDER BY id ASC`,
+    [userId]
+  );
+
+  assert.equal(res.rows[0].points_awarded, 1000); // 1st correct: 500 + 500 exact
+  assert.equal(res.rows[1].points_awarded, 1000); // 2nd correct: 1000 winner only
+  assert.equal(res.rows[2].points_awarded, 3000); // 3rd correct: 1500 + 1500 exact
+}
+
 async function main() {
   testEvaluatePredictionPoints();
   await testSingleEliminationAdvancement();
   await testEightTeamDoubleEliminationAdvancement();
+  await testRecalculateTournamentPredictions();
   console.log("Bracket & Prediction unit tests PASSED successfully!");
 }
 

@@ -176,8 +176,8 @@ function PredictionsContent() {
           </select>
         </div>
 
-        <div className="px-3 py-1.5 rounded-xl bg-blue-950/70 border border-blue-500/30 text-xs font-bold text-cyan-300">
-          🎯 5 очков за победителя • +5 очков за точный счет
+        <div className="px-3.5 py-1.5 rounded-xl bg-blue-950/70 border border-blue-500/30 text-xs font-bold text-cyan-300">
+          🎯 Линейная шкала: 1-й угаданный: 500 (+500 за счет) • 2-й: 1000 (+1000) • 3-й: 1500 (+1500)...
         </div>
       </div>
 
@@ -199,7 +199,7 @@ function PredictionsContent() {
           </h1>
 
           <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-            Делайте прогнозы на исходы матчей и точный счет серии. Очки начисляются сразу после завершения серии и учитываются в глобальной таблице лидеров платформы.
+            Делайте прогнозы на исходы матчей и точный счет серии. Очки растут линейно за каждый правильно угаданный матч (500, 1000, 1500... и столько же бонусом за точный счет) и суммируются с очками фэнтези в таблице лидеров.
           </p>
         </div>
       </div>
