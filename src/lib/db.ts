@@ -87,6 +87,17 @@ export async function initDb() {
 
       ALTER TABLE fantasy_cards ADD COLUMN IF NOT EXISTS quality TEXT DEFAULT 'common';
       ALTER TABLE fantasy_cards ADD COLUMN IF NOT EXISTS title TEXT DEFAULT 'Стальной';
+      ALTER TABLE fantasy_cards ADD COLUMN IF NOT EXISTS emblems JSONB DEFAULT '[]';
+
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS madstones INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS camps_stacked INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS runes INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS watchers INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS lotuses INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS smokes INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS teamfight_pct REAL DEFAULT 0.6;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS tormentor_kills INTEGER DEFAULT 0;
+      ALTER TABLE match_player_stats ADD COLUMN IF NOT EXISTS courier_kills INTEGER DEFAULT 0;
 
       CREATE TABLE IF NOT EXISTS tournament_user_tokens (
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

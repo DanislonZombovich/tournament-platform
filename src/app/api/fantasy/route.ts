@@ -3,13 +3,11 @@ import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { query } from "@/lib/db";
 import {
-  rollRandomTraits,
-  RolledTrait,
-  getRandomQuality,
-  getRandomTitle,
-  CardQuality,
-  CARD_QUALITIES,
-  CARD_TITLES,
+  calculateBestGameFantasyPoints,
+  DEFAULT_ROLE_EMBLEMS,
+  FantasyEmblem,
+  PlayerStats,
+  VALVE_FANTASY_EMBLEMS,
 } from "@/lib/fantasy";
 
 export async function GET(req: NextRequest) {
@@ -85,36 +83,17 @@ export async function GET(req: NextRequest) {
     }
 
     let cardsWithDetails: any[] = [];
-    let tokens = tournament.initial_rerolls || 20;
-
     const slots = ["pos1", "pos2", "pos3", "pos4", "pos5"];
 
     if (user) {
-      // Get or initialize per-tournament tokens for user
-      const userTokensRes = await query<{ tokens: number }>(
-        `SELECT tokens FROM tournament_user_tokens WHERE user_id = $1 AND tournament_id = $2`,
-        [user.id, tournamentId]
-      );
-
-      if (userTokensRes.rows.length === 0) {
-        tokens = tournament.initial_rerolls || 20;
-        await query(
-          `INSERT INTO tournament_user_tokens (user_id, tournament_id, tokens)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (user_id, tournament_id) DO NOTHING`,
-          [user.id, tournamentId, tokens]
-        );
-      } else {
-        tokens = userTokensRes.rows[0].tokens;
-      }
-
       const userCardsRes = await query<{
         id: string;
         role_slot: string;
         selected_player_id: string | null;
-        quality: CardQuality;
+        quality: string;
         title: string;
         traits: string;
+        emblems: any;
         points_earned: number;
         player_username: string | null;
         player_steam_id: string | null;
@@ -128,7 +107,7 @@ export async function GET(req: NextRequest) {
         `SELECT fc.id, fc.role_slot, fc.selected_player_id,
                 COALESCE(fc.quality, 'common') AS quality,
                 COALESCE(fc.title, 'Стальной') AS title,
-                fc.traits, fc.points_earned,
+                fc.traits, fc.emblems, fc.points_earned,
                 u.username AS player_username, u.steam_id AS player_steam_id,
                 u.steam_name AS player_steam_name, u.steam_avatar AS player_steam_avatar,
                 t.id AS team_id, t.name AS team_name, t.tag AS team_tag, t.logo_url AS team_logo
@@ -144,27 +123,25 @@ export async function GET(req: NextRequest) {
 
       for (const slot of slots) {
         let card = existingCardsMap.get(slot);
+        const defaultEmblems = DEFAULT_ROLE_EMBLEMS[slot] || ["creepScore", "deaths", "towerKills"];
 
         if (!card) {
           const cardId = "fc_" + crypto.randomBytes(8).toString("hex");
-          const initQuality = getRandomQuality();
-          const initTitle = getRandomTitle();
-          const initialTraits = rollRandomTraits(3, initQuality);
-
           await query(
-            `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, quality, title, traits, points_earned)
-             VALUES ($1, $2, $3, $4, NULL, $5, $6, $7, 0)
+            `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, quality, title, traits, emblems, points_earned)
+             VALUES ($1, $2, $3, $4, NULL, 'common', 'Стальной', $5, $6, 0)
              ON CONFLICT (user_id, tournament_id, role_slot) DO NOTHING`,
-            [cardId, user.id, tournamentId, slot, initQuality, initTitle, JSON.stringify(initialTraits)]
+            [cardId, user.id, tournamentId, slot, JSON.stringify(defaultEmblems), JSON.stringify(defaultEmblems)]
           );
 
           card = {
             id: cardId,
             role_slot: slot,
             selected_player_id: null,
-            quality: initQuality,
-            title: initTitle,
-            traits: JSON.stringify(initialTraits),
+            quality: "common",
+            title: "Стальной",
+            traits: JSON.stringify(defaultEmblems),
+            emblems: defaultEmblems,
             points_earned: 0,
             player_username: null,
             player_steam_id: null,
@@ -177,21 +154,79 @@ export async function GET(req: NextRequest) {
           };
         }
 
-        let parsedTraits: RolledTrait[] = [];
-        try {
-          parsedTraits = typeof card.traits === "string" ? JSON.parse(card.traits) : card.traits;
-        } catch {
-          parsedTraits = rollRandomTraits(3, card.quality || "common");
+        let emblemIds: string[] = [];
+        if (Array.isArray(card.emblems) && card.emblems.length > 0) {
+          emblemIds = card.emblems;
+        } else if (typeof card.emblems === "string" && card.emblems !== "[]" && card.emblems.trim() !== "") {
+          try {
+            emblemIds = JSON.parse(card.emblems);
+          } catch {}
+        }
+
+        if (emblemIds.length === 0) {
+          if (typeof card.traits === "string" && card.traits.trim() !== "") {
+            try {
+              const parsed = JSON.parse(card.traits);
+              if (Array.isArray(parsed)) {
+                emblemIds = parsed.map((t: any) => (typeof t === "string" ? t : t.id)).filter(Boolean);
+              }
+            } catch {}
+          } else if (Array.isArray(card.traits)) {
+            emblemIds = card.traits.map((t: any) => (typeof t === "string" ? t : t.id)).filter(Boolean);
+          }
+        }
+
+        if (emblemIds.length === 0) {
+          emblemIds = defaultEmblems;
+        }
+
+        emblemIds = emblemIds.slice(0, 3);
+        const emblemDetails: FantasyEmblem[] = emblemIds
+          .map((id) => VALVE_FANTASY_EMBLEMS[id])
+          .filter(Boolean);
+
+        let gamesPlayed = 0;
+        let bestGameScore = card.points_earned || 0;
+        let gameScoresList: number[] = [];
+
+        if (card.selected_player_id) {
+          const pStatsRes = await query<PlayerStats>(
+            `SELECT mps.* FROM match_player_stats mps
+             JOIN matches m ON m.id = mps.match_id
+             WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+            [tournamentId, card.selected_player_id]
+          );
+
+          gamesPlayed = pStatsRes.rows.length;
+          if (gamesPlayed > 0) {
+            const bestResult = calculateBestGameFantasyPoints(pStatsRes.rows, emblemIds);
+            bestGameScore = bestResult.bestScore;
+            gameScoresList = bestResult.gameScores;
+
+            if (bestGameScore !== card.points_earned) {
+              await query(`UPDATE fantasy_cards SET points_earned = $1 WHERE id = $2`, [bestGameScore, card.id]);
+            }
+          }
         }
 
         cardsWithDetails.push({
           id: card.id,
           role_slot: slot,
           selected_player_id: card.selected_player_id,
-          quality: card.quality || "common",
-          title: card.title || "Стальной",
-          traits: parsedTraits,
-          points_earned: card.points_earned || 0,
+          emblems: emblemIds,
+          emblem_details: emblemDetails,
+          points_earned: bestGameScore,
+          games_played: gamesPlayed,
+          game_scores: gameScoresList,
+          quality: "common",
+          title: "Стальной",
+          traits: emblemIds.map((id) => ({
+            id,
+            label: VALVE_FANTASY_EMBLEMS[id]?.label || id,
+            bonus: 100,
+            colorClass: VALVE_FANTASY_EMBLEMS[id]?.color === "red" ? "text-red-400" : VALVE_FANTASY_EMBLEMS[id]?.color === "blue" ? "text-sky-400" : "text-emerald-400",
+            locked: false,
+          })),
           selected_player: card.selected_player_id
             ? {
                 player_id: card.selected_player_id,
@@ -209,14 +244,25 @@ export async function GET(req: NextRequest) {
       }
     } else {
       for (const slot of slots) {
+        const defaultEmblems = DEFAULT_ROLE_EMBLEMS[slot] || ["creepScore", "deaths", "towerKills"];
         cardsWithDetails.push({
           id: "preview_" + slot,
           role_slot: slot,
           selected_player_id: null,
+          emblems: defaultEmblems,
+          emblem_details: defaultEmblems.map((id) => VALVE_FANTASY_EMBLEMS[id]).filter(Boolean),
+          points_earned: 0,
+          games_played: 0,
+          game_scores: [],
           quality: "common",
           title: "Стальной",
-          traits: rollRandomTraits(3, "common"),
-          points_earned: 0,
+          traits: defaultEmblems.map((id) => ({
+            id,
+            label: VALVE_FANTASY_EMBLEMS[id]?.label || id,
+            bonus: 100,
+            colorClass: VALVE_FANTASY_EMBLEMS[id]?.color === "red" ? "text-red-400" : VALVE_FANTASY_EMBLEMS[id]?.color === "blue" ? "text-sky-400" : "text-emerald-400",
+            locked: false,
+          })),
           selected_player: null,
         });
       }
@@ -225,9 +271,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       tournament,
       is_fantasy_locked: tournament.is_fantasy_locked,
-      fantasy_tokens: tokens,
+      fantasy_tokens: 20,
       cards: cardsWithDetails,
       players_by_role: playersByRole,
+      all_emblems: Object.values(VALVE_FANTASY_EMBLEMS),
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
@@ -242,7 +289,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { action, role_slot, player_id, card_id, trait_id, tournament_id = "ti-2026-main" } = body;
+    const { action, role_slot, player_id, card_id, emblems, tournament_id = "ti-2026-main" } = body;
 
     const tournamentRes = await query<{ id: string; is_fantasy_locked: boolean; initial_rerolls: number }>(
       `SELECT id, is_fantasy_locked, COALESCE(initial_rerolls, 20) AS initial_rerolls FROM tournaments WHERE id = $1`,
@@ -260,7 +307,6 @@ export async function POST(req: NextRequest) {
 
     const validRoles = ["pos1", "pos2", "pos3", "pos4", "pos5"];
 
-    // 1. SELECT PLAYER
     if (action === "select_player") {
       if (!validRoles.includes(role_slot)) {
         return NextResponse.json({ error: "Неверный слот роли" }, { status: 400 });
@@ -268,7 +314,7 @@ export async function POST(req: NextRequest) {
 
       if (!player_id) {
         await query(
-          `UPDATE fantasy_cards SET selected_player_id = NULL
+          `UPDATE fantasy_cards SET selected_player_id = NULL, points_earned = 0
            WHERE user_id = $1 AND tournament_id = $2 AND role_slot = $3`,
           [user.id, tournament_id, role_slot]
         );
@@ -289,22 +335,32 @@ export async function POST(req: NextRequest) {
         }, { status: 400 });
       }
 
-      const cardRes = await query<{ id: string }>(
-        `SELECT id FROM fantasy_cards WHERE user_id = $1 AND tournament_id = $2 AND role_slot = $3`,
+      const defaultEmblems = DEFAULT_ROLE_EMBLEMS[role_slot] || ["creepScore", "deaths", "towerKills"];
+      const cardRes = await query<{ id: string; emblems: any; traits: any }>(
+        `SELECT id, emblems, traits FROM fantasy_cards WHERE user_id = $1 AND tournament_id = $2 AND role_slot = $3`,
         [user.id, tournament_id, role_slot]
       );
 
+      let cardId: string;
+      let activeEmblemIds: string[] = defaultEmblems;
+
       if (cardRes.rows.length === 0) {
-        const cardId = "fc_" + crypto.randomBytes(8).toString("hex");
-        const initQuality = getRandomQuality();
-        const initTitle = getRandomTitle();
-        const initialTraits = rollRandomTraits(3, initQuality);
+        cardId = "fc_" + crypto.randomBytes(8).toString("hex");
         await query(
-          `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, quality, title, traits)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-          [cardId, user.id, tournament_id, role_slot, player_id, initQuality, initTitle, JSON.stringify(initialTraits)]
+          `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, quality, title, traits, emblems, points_earned)
+           VALUES ($1, $2, $3, $4, $5, 'common', 'Стальной', $6, $7, 0)`,
+          [cardId, user.id, tournament_id, role_slot, player_id, JSON.stringify(defaultEmblems), JSON.stringify(defaultEmblems)]
         );
       } else {
+        cardId = cardRes.rows[0].id;
+        const currentEmblems = cardRes.rows[0].emblems;
+        if (Array.isArray(currentEmblems) && currentEmblems.length > 0) {
+          activeEmblemIds = currentEmblems;
+        } else if (typeof currentEmblems === "string" && currentEmblems !== "[]" && currentEmblems.trim() !== "") {
+          try {
+            activeEmblemIds = JSON.parse(currentEmblems);
+          } catch {}
+        }
         await query(
           `UPDATE fantasy_cards SET selected_player_id = $1
            WHERE user_id = $2 AND tournament_id = $3 AND role_slot = $4`,
@@ -312,132 +368,96 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      return NextResponse.json({ success: true, message: "Игрок назначен в фэнтези-ростер!" });
-    }
-
-    // 2. TOGGLE LOCK ON A SPECIFIC TRAIT
-    if (action === "toggle_lock") {
-      if (!card_id || !trait_id) {
-        return NextResponse.json({ error: "Не указаны параметры карточки или свойства" }, { status: 400 });
-      }
-
-      const cardRes = await query<{ id: string; traits: string }>(
-        `SELECT id, traits FROM fantasy_cards WHERE id = $1 AND user_id = $2`,
-        [card_id, user.id]
+      const pStatsRes = await query<PlayerStats>(
+        `SELECT mps.* FROM match_player_stats mps
+         JOIN matches m ON m.id = mps.match_id
+         WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+        [tournament_id, player_id]
       );
 
+      let bestScore = 0;
+      if (pStatsRes.rows.length > 0) {
+        const bestResult = calculateBestGameFantasyPoints(pStatsRes.rows, activeEmblemIds);
+        bestScore = bestResult.bestScore;
+      }
+
+      await query(`UPDATE fantasy_cards SET points_earned = $1 WHERE id = $2`, [bestScore, cardId]);
+
+      return NextResponse.json({
+        success: true,
+        message: "Игрок назначен в фэнтези-ростер!",
+        points_earned: bestScore,
+      });
+    }
+
+    if (action === "set_emblems") {
+      if (!validRoles.includes(role_slot)) {
+        return NextResponse.json({ error: "Неверный слот роли" }, { status: 400 });
+      }
+
+      if (!Array.isArray(emblems) || emblems.length === 0 || emblems.length > 3) {
+        return NextResponse.json({ error: "Необходимо выбрать от 1 до 3 эмблем" }, { status: 400 });
+      }
+
+      const invalidEmblem = emblems.find((id) => !VALVE_FANTASY_EMBLEMS[id]);
+      if (invalidEmblem) {
+        return NextResponse.json({ error: `Неизвестная эмблема: ${invalidEmblem}` }, { status: 400 });
+      }
+
+      const cardRes = await query<{ id: string; selected_player_id: string | null }>(
+        `SELECT id, selected_player_id FROM fantasy_cards WHERE user_id = $1 AND tournament_id = $2 AND role_slot = $3`,
+        [user.id, tournament_id, role_slot]
+      );
+
+      let cardId: string;
+      let selectedPlayerId: string | null = null;
+
       if (cardRes.rows.length === 0) {
-        return NextResponse.json({ error: "Карточка не найдена" }, { status: 404 });
+        cardId = "fc_" + crypto.randomBytes(8).toString("hex");
+        await query(
+          `INSERT INTO fantasy_cards (id, user_id, tournament_id, role_slot, selected_player_id, quality, title, traits, emblems, points_earned)
+           VALUES ($1, $2, $3, $4, NULL, 'common', 'Стальной', $5, $6, 0)`,
+          [cardId, user.id, tournament_id, role_slot, JSON.stringify(emblems), JSON.stringify(emblems)]
+        );
+      } else {
+        cardId = cardRes.rows[0].id;
+        selectedPlayerId = cardRes.rows[0].selected_player_id;
+        await query(
+          `UPDATE fantasy_cards SET emblems = $1, traits = $1
+           WHERE id = $2`,
+          [JSON.stringify(emblems), cardId]
+        );
       }
 
-      let traits: RolledTrait[] = [];
-      try {
-        traits = typeof cardRes.rows[0].traits === "string" ? JSON.parse(cardRes.rows[0].traits) : cardRes.rows[0].traits;
-      } catch {
-        traits = [];
-      }
+      let bestScore = 0;
+      if (selectedPlayerId) {
+        const pStatsRes = await query<PlayerStats>(
+          `SELECT mps.* FROM match_player_stats mps
+           JOIN matches m ON m.id = mps.match_id
+           WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
+          [tournament_id, selectedPlayerId]
+        );
 
-      traits = traits.map((t) => {
-        if (t.id === trait_id) {
-          return { ...t, locked: !t.locked };
+        if (pStatsRes.rows.length > 0) {
+          const bestResult = calculateBestGameFantasyPoints(pStatsRes.rows, emblems);
+          bestScore = bestResult.bestScore;
         }
-        return t;
-      });
+      }
 
-      await query(`UPDATE fantasy_cards SET traits = $1 WHERE id = $2`, [JSON.stringify(traits), card_id]);
+      await query(`UPDATE fantasy_cards SET points_earned = $1 WHERE id = $2`, [bestScore, cardId]);
 
       return NextResponse.json({
         success: true,
-        traits,
-        message: "Фиксация свойства обновлена",
+        emblems,
+        points_earned: bestScore,
+        message: "Эмблемы успешно сохранены!",
       });
     }
 
-    // 3. REROLL TRAITS ("КРУТИТЬ ХАРАКТЕРИСТИКИ")
-    if (action === "reroll_traits") {
-      if (!card_id) {
-        return NextResponse.json({ error: "Не указан ID карточки" }, { status: 400 });
-      }
-
-      // Read tournament-specific tokens for the user
-      const tokensRes = await query<{ tokens: number }>(
-        `SELECT tokens FROM tournament_user_tokens WHERE user_id = $1 AND tournament_id = $2`,
-        [user.id, tournament_id]
-      );
-
-      let currentTokens = tokensRes.rows.length > 0 ? tokensRes.rows[0].tokens : (tournament.initial_rerolls || 20);
-
-      if (currentTokens <= 0) {
-        return NextResponse.json({
-          error: "У вас закончились жетоны перековки для этого турнира",
-        }, { status: 400 });
-      }
-
-      const cardRes = await query<{
-        id: string;
-        quality: CardQuality;
-        title: string;
-        traits: string;
-      }>(
-        `SELECT id, COALESCE(quality, 'common') AS quality, COALESCE(title, 'Стальной') AS title, traits
-         FROM fantasy_cards WHERE id = $1 AND user_id = $2`,
-        [card_id, user.id]
-      );
-
-      if (cardRes.rows.length === 0) {
-        return NextResponse.json({ error: "Карточка не найдена" }, { status: 404 });
-      }
-
-      const card = cardRes.rows[0];
-      let existingTraits: RolledTrait[] = [];
-      try {
-        existingTraits = typeof card.traits === "string" ? JSON.parse(card.traits) : card.traits;
-      } catch {
-        existingTraits = [];
-      }
-
-      // Small chance to upgrade quality on reroll (15% chance to roll upgraded quality)
-      let currentQuality = card.quality;
-      if (Math.random() < 0.15) {
-        const qualityProgression: Record<CardQuality, CardQuality> = {
-          common: "rare",
-          rare: "epic",
-          epic: "immortal",
-          immortal: "immortal",
-        };
-        currentQuality = qualityProgression[currentQuality] || currentQuality;
-      }
-
-      // Chance to reroll title if not locked (30% chance for new title)
-      let currentTitle = card.title;
-      if (Math.random() < 0.30) {
-        currentTitle = getRandomTitle();
-      }
-
-      const newTraits = rollRandomTraits(3, currentQuality, existingTraits);
-
-      await query(
-        `UPDATE fantasy_cards SET traits = $1, quality = $2, title = $3 WHERE id = $4`,
-        [JSON.stringify(newTraits), currentQuality, currentTitle, card_id]
-      );
-
-      // Decrement tournament tokens
-      const remainingTokens = currentTokens - 1;
-      await query(
-        `INSERT INTO tournament_user_tokens (user_id, tournament_id, tokens)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (user_id, tournament_id)
-         DO UPDATE SET tokens = $3`,
-        [user.id, tournament_id, remainingTokens]
-      );
-
+    if (action === "toggle_lock" || action === "reroll_traits") {
       return NextResponse.json({
         success: true,
-        traits: newTraits,
-        quality: currentQuality,
-        title: currentTitle,
-        remaining_tokens: remainingTokens,
-        message: "Характеристики карточки успешно перекованы!",
+        message: "Эмблемы зафиксированы с модификатором 100%.",
       });
     }
 

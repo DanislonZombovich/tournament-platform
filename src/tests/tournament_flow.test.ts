@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { initDb, query } from "../lib/db";
 import { advanceDoubleElimination, evaluatePredictionPoints } from "../lib/bracket";
-import { calculateFantasyPoints, rollRandomTraits } from "../lib/fantasy";
+import { calculateBestGameFantasyPoints, calculateFantasyPoints, rollRandomTraits } from "../lib/fantasy";
 
 async function runTournamentFlowIntegrationTest() {
   await initDb();
@@ -186,6 +186,26 @@ async function runTournamentFlowIntegrationTest() {
     `SELECT points_earned FROM fantasy_cards WHERE id = 'fc_test_pos1'`
   );
   assert.equal(cardCheck.rows[0].points_earned, calculatedPoints);
+
+  const mStatsGame2 = {
+    kills: 22,
+    deaths: 0,
+    assists: 14,
+    last_hits: 420,
+    denies: 20,
+    gpm: 950,
+    wards_placed: 4,
+    wards_destroyed: 5,
+    tower_kills: 6,
+    roshan_kills: 2,
+    first_blood: true,
+    stuns: 25,
+  };
+  const g1Pts = calculateFantasyPoints(mStats, ["creepScore", "deaths", "towerKills"]);
+  const g2Pts = calculateFantasyPoints(mStatsGame2, ["creepScore", "deaths", "towerKills"]);
+  const bestResult = calculateBestGameFantasyPoints([mStats, mStatsGame2], ["creepScore", "deaths", "towerKills"]);
+  assert.ok(g2Pts > g1Pts);
+  assert.equal(bestResult.bestScore, g2Pts);
 
   await query(
     `UPDATE predictions SET points_awarded = 3, is_calculated = true WHERE id = 'pred_test_ub1'`

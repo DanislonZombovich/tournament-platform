@@ -134,6 +134,15 @@ CREATE TABLE IF NOT EXISTS match_player_stats (
   roshan_kills INTEGER DEFAULT 0,
   first_blood BOOLEAN DEFAULT FALSE,
   stuns REAL DEFAULT 0,
+  madstones INTEGER DEFAULT 0,
+  camps_stacked INTEGER DEFAULT 0,
+  runes INTEGER DEFAULT 0,
+  watchers INTEGER DEFAULT 0,
+  lotuses INTEGER DEFAULT 0,
+  smokes INTEGER DEFAULT 0,
+  teamfight_pct REAL DEFAULT 0.6,
+  tormentor_kills INTEGER DEFAULT 0,
+  courier_kills INTEGER DEFAULT 0,
   raw_fantasy_points REAL DEFAULT 0,
   CONSTRAINT uq_match_player UNIQUE (match_id, player_id)
 );
@@ -147,6 +156,7 @@ CREATE TABLE IF NOT EXISTS fantasy_cards (
   quality TEXT DEFAULT 'common',
   title TEXT DEFAULT 'Стальной',
   traits JSONB NOT NULL DEFAULT '[]',
+  emblems JSONB NOT NULL DEFAULT '[]',
   points_earned REAL DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   CONSTRAINT uq_user_tournament_role UNIQUE (user_id, tournament_id, role_slot)

@@ -73,26 +73,6 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
     window.location.href = "/api/auth/steam/login";
   };
 
-  const handleQuickLogin = async (provider: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const chosenName = (mode === "register" ? username : loginField).trim();
-      const res = await fetch("/api/auth/quick-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider, username: chosenName || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Ошибка быстрого входа");
-      onSuccess();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-md bg-[#091122] border border-blue-500/40 rounded-2xl p-6 sm:p-7 shadow-2xl shadow-blue-500/15">
@@ -280,16 +260,6 @@ export default function AuthModal({ mode: initialMode, onClose, onSuccess }: Aut
               <path d="M11.979 0C5.678 0 .511 4.86.022 11.037l6.432 2.658c.545-.371 1.203-.59 1.912-.59.063 0 .125.004.188.006l2.861-4.142V8.91c0-2.495 2.028-4.524 4.524-4.524 2.494 0 4.524 2.031 4.524 4.527s-2.03 4.525-4.524 4.525h-.105l-4.076 2.911c0 .052.005.105.005.159 0 1.875-1.515 3.396-3.39 3.396-1.635 0-3.016-1.173-3.331-2.704L.436 15.07C1.829 20.279 6.541 24 12.127 24c6.627 0 12-5.373 12-12S18.605 0 11.979 0z" />
             </svg>
             <span>Войти через Steam OpenID</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleQuickLogin("steam")}
-            disabled={loading}
-            className="w-full py-2 px-3 rounded-lg bg-cyan-950/40 hover:bg-cyan-900/50 border border-cyan-500/30 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition"
-          >
-            <span>⚡</span>
-            <span>Быстрый тест-вход (Steam Pro Mock)</span>
           </button>
         </div>
       </div>

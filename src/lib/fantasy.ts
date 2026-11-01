@@ -1,3 +1,15 @@
+export type EmblemColor = "red" | "blue" | "green";
+
+export interface FantasyEmblem {
+  id: string;
+  label: string;
+  color: EmblemColor;
+  points: number;
+  unit: string;
+  description: string;
+  modifier: number;
+}
+
 export type CardQuality = "common" | "rare" | "epic" | "immortal";
 
 export interface QualityConfig {
@@ -80,15 +92,6 @@ export const CARD_TITLES: CardTitle[] = [
   { id: "furious", name: "Яростный", description: "+20% к очкам за убийства и ассисты", bonusType: "kills", bonusPercent: 20 },
 ];
 
-export interface TraitDefinition {
-  id: string;
-  label: string;
-  category: "kills" | "deaths" | "cs" | "economy" | "support" | "objectives" | "combat";
-  colorClass: string;
-  minBonus: number;
-  maxBonus: number;
-}
-
 export interface RolledTrait {
   id: string;
   label: string;
@@ -105,14 +108,21 @@ export interface PlayerStats {
   denies: number;
   gpm: number;
   wards_placed: number;
-  wards_destroyed: number;
+  wards_destroyed?: number;
   tower_kills: number;
   roshan_kills: number;
   first_blood: boolean;
   stuns: number;
+  madstones?: number;
   camps_stacked?: number;
+  runes?: number;
   runes_grabbed?: number;
+  lotuses?: number;
+  watchers?: number;
+  smokes?: number;
   teamfight_pct?: number;
+  tormentor_kills?: number;
+  courier_kills?: number;
 }
 
 export const ROLE_CONFIGS: Record<string, { label: string; group: "core" | "mid" | "support"; order: number }> = {
@@ -123,172 +133,345 @@ export const ROLE_CONFIGS: Record<string, { label: string; group: "core" | "mid"
   pos5: { label: "Полная поддержка (Позиция 5)", group: "support", order: 5 },
 };
 
-export const FANTASY_TRAITS_POOL: TraitDefinition[] = [
-  { id: "kills", label: "Убийства (+1.21 за килл)", category: "kills", colorClass: "text-red-400 bg-red-950/60 border-red-500/40", minBonus: 15, maxBonus: 40 },
-  { id: "deaths", label: "Снижение штрафа смертей", category: "deaths", colorClass: "text-emerald-400 bg-emerald-950/60 border-emerald-500/40", minBonus: 15, maxBonus: 45 },
-  { id: "creep_score", label: "Добивания и денаи (CS)", category: "cs", colorClass: "text-green-400 bg-green-950/60 border-green-500/40", minBonus: 15, maxBonus: 40 },
-  { id: "gpm", label: "Золото в минуту (GPM)", category: "economy", colorClass: "text-yellow-400 bg-yellow-950/60 border-yellow-500/40", minBonus: 10, maxBonus: 35 },
-  { id: "wards", label: "Установка и снятие вардов (+1.13)", category: "support", colorClass: "text-sky-400 bg-sky-950/60 border-sky-500/40", minBonus: 15, maxBonus: 45 },
-  { id: "towers", label: "Урон и добивание вышек (+3.40)", category: "objectives", colorClass: "text-amber-400 bg-amber-950/60 border-amber-500/40", minBonus: 15, maxBonus: 40 },
-  { id: "roshan", label: "Убийства Рошана (+8.50)", category: "objectives", colorClass: "text-rose-400 bg-rose-950/60 border-rose-500/40", minBonus: 20, maxBonus: 50 },
-  { id: "first_blood", label: "Первая кровь (FB +17.0)", category: "combat", colorClass: "text-purple-400 bg-purple-950/60 border-purple-500/40", minBonus: 20, maxBonus: 50 },
-  { id: "stuns", label: "Оглушения (+0.15/сек)", category: "combat", colorClass: "text-cyan-400 bg-cyan-950/60 border-cyan-500/40", minBonus: 15, maxBonus: 45 },
-  { id: "assists", label: "Помощь в убийствах (+0.60)", category: "combat", colorClass: "text-teal-400 bg-teal-950/60 border-teal-500/40", minBonus: 10, maxBonus: 35 },
-  { id: "teamfight", label: "Участие в драках (Teamfight)", category: "combat", colorClass: "text-orange-400 bg-orange-950/60 border-orange-500/40", minBonus: 15, maxBonus: 40 },
-  { id: "runes", label: "Подбор рун (+1.21)", category: "support", colorClass: "text-indigo-400 bg-indigo-950/60 border-indigo-500/40", minBonus: 15, maxBonus: 40 },
-];
+export const VALVE_FANTASY_EMBLEMS: Record<string, FantasyEmblem> = {
+  creepScore: {
+    id: "creepScore",
+    label: "Крипы",
+    color: "red",
+    points: 3,
+    unit: "за крипа",
+    description: "3 очка за каждого добитого крипа",
+    modifier: 100,
+  },
+  gpm: {
+    id: "gpm",
+    label: "З/М",
+    color: "red",
+    points: 2,
+    unit: "за золото в минуту",
+    description: "2 очка за каждую единицу GPM",
+    modifier: 100,
+  },
+  deaths: {
+    id: "deaths",
+    label: "Смерти",
+    color: "red",
+    points: 195,
+    unit: "1950 стартует, -195 за смерть",
+    description: "1950 очков базово минус 195 за каждую смерть",
+    modifier: 100,
+  },
+  towerKills: {
+    id: "towerKills",
+    label: "Башни",
+    color: "red",
+    points: 352,
+    unit: "за башню",
+    description: "352 очка за каждую разрушенную башню",
+    modifier: 100,
+  },
+  kills: {
+    id: "kills",
+    label: "Убийства",
+    color: "red",
+    points: 107,
+    unit: "за убийство",
+    description: "107 очков за каждое совершенное убийство",
+    modifier: 100,
+  },
+  madstones: {
+    id: "madstones",
+    label: "Подбор безумрудов",
+    color: "red",
+    points: 13,
+    unit: "за безумруд",
+    description: "13 очков за каждый подобранный безумруд",
+    modifier: 100,
+  },
+  campsStacked: {
+    id: "campsStacked",
+    label: "Стак лагерей",
+    color: "blue",
+    points: 234,
+    unit: "за стак",
+    description: "234 очка за каждый стакнутый лагерь",
+    modifier: 100,
+  },
+  runes: {
+    id: "runes",
+    label: "Руны",
+    color: "blue",
+    points: 141,
+    unit: "за руну",
+    description: "141 очко за каждую руну",
+    modifier: 100,
+  },
+  lotuses: {
+    id: "lotuses",
+    label: "Сбор лотосов",
+    color: "blue",
+    points: 176,
+    unit: "за лотос",
+    description: "176 очков за каждый лотос",
+    modifier: 100,
+  },
+  watchers: {
+    id: "watchers",
+    label: "Захват смотрителей",
+    color: "blue",
+    points: 147,
+    unit: "за смотрителя",
+    description: "147 очков за каждого смотрителя",
+    modifier: 100,
+  },
+  obsPlaced: {
+    id: "obsPlaced",
+    label: "Установка вардов",
+    color: "blue",
+    points: 117,
+    unit: "за Observer Ward",
+    description: "117 очков за каждый Observer Ward",
+    modifier: 100,
+  },
+  smokes: {
+    id: "smokes",
+    label: "Применения Smoke of Deceit",
+    color: "blue",
+    points: 293,
+    unit: "за смок",
+    description: "293 очка за применение Smoke of Deceit",
+    modifier: 100,
+  },
+  teamfight: {
+    id: "teamfight",
+    label: "Командные сражения",
+    color: "green",
+    points: 2124,
+    unit: "максимум за участие",
+    description: "До 2124 очков за участие в командных драках",
+    modifier: 100,
+  },
+  stuns: {
+    id: "stuns",
+    label: "Оглушения",
+    color: "green",
+    points: 10,
+    unit: "за секунду",
+    description: "10 очков за секунду оглушения и контроля",
+    modifier: 100,
+  },
+  firstblood: {
+    id: "firstblood",
+    label: "Первая кровь",
+    color: "green",
+    points: 1934,
+    unit: "за первую кровь",
+    description: "1934 очка за участие в первой крови",
+    modifier: 100,
+  },
+  tormentorKills: {
+    id: "tormentorKills",
+    label: "Убийства Терзателей",
+    color: "green",
+    points: 879,
+    unit: "за Терзателя",
+    description: "879 очков за убийство Терзателя",
+    modifier: 100,
+  },
+  roshanKills: {
+    id: "roshanKills",
+    label: "Убийства Рошана",
+    color: "green",
+    points: 1172,
+    unit: "за Рошана",
+    description: "1172 очка за убийство Рошана",
+    modifier: 100,
+  },
+  courierKills: {
+    id: "courierKills",
+    label: "Убийства курьеров",
+    color: "green",
+    points: 703,
+    unit: "за курьера",
+    description: "703 очка за убийство вражеского курьера",
+    modifier: 100,
+  },
+};
+
+export const DEFAULT_ROLE_EMBLEMS: Record<string, string[]> = {
+  pos1: ["creepScore", "deaths", "towerKills"],
+  pos2: ["kills", "runes", "teamfight"],
+  pos3: ["stuns", "tormentorKills", "teamfight"],
+  pos4: ["obsPlaced", "campsStacked", "smokes"],
+  pos5: ["obsPlaced", "teamfight", "watchers"],
+};
+
+export function calculateEmblemPoints(emblemId: string, stats: Partial<PlayerStats>): number {
+  const emblem = VALVE_FANTASY_EMBLEMS[emblemId];
+  if (!emblem) return 0;
+
+  let baseScore = 0;
+  switch (emblemId) {
+    case "creepScore":
+      baseScore = (Number(stats.last_hits) || 0) * 3;
+      break;
+    case "gpm":
+      baseScore = (Number(stats.gpm) || 0) * 2;
+      break;
+    case "deaths":
+      baseScore = 1950 - (Number(stats.deaths) || 0) * 195;
+      break;
+    case "towerKills":
+      baseScore = (Number(stats.tower_kills) || 0) * 352;
+      break;
+    case "kills":
+      baseScore = (Number(stats.kills) || 0) * 107;
+      break;
+    case "madstones":
+      baseScore = (Number(stats.madstones) || 0) * 13;
+      break;
+    case "campsStacked":
+      baseScore = (Number(stats.camps_stacked) || 0) * 234;
+      break;
+    case "runes":
+      baseScore = (Number(stats.runes ?? stats.runes_grabbed) || 0) * 141;
+      break;
+    case "lotuses":
+      baseScore = (Number(stats.lotuses) || 0) * 176;
+      break;
+    case "watchers":
+      baseScore = (Number(stats.watchers) || 0) * 147;
+      break;
+    case "obsPlaced":
+      baseScore = (Number(stats.wards_placed) || 0) * 117;
+      break;
+    case "smokes":
+      baseScore = (Number(stats.smokes) || 0) * 293;
+      break;
+    case "teamfight": {
+      const tfPct = typeof stats.teamfight_pct === "number"
+        ? Math.min(1, Math.max(0, stats.teamfight_pct))
+        : ((Number(stats.assists) || 0) > 0
+            ? Math.min(1, ((Number(stats.kills) || 0) + (Number(stats.assists) || 0)) / Math.max(1, ((Number(stats.kills) || 0) + (Number(stats.assists) || 0)) * 1.4))
+            : 0.6);
+      baseScore = Math.round(tfPct * 2124);
+      break;
+    }
+    case "stuns":
+      baseScore = Math.round((Number(stats.stuns) || 0) * 10);
+      break;
+    case "firstblood":
+      baseScore = stats.first_blood ? 1934 : 0;
+      break;
+    case "tormentorKills":
+      baseScore = (Number(stats.tormentor_kills) || 0) * 879;
+      break;
+    case "roshanKills":
+      baseScore = (Number(stats.roshan_kills) || 0) * 1172;
+      break;
+    case "courierKills":
+      baseScore = (Number(stats.courier_kills) || 0) * 703;
+      break;
+    default:
+      baseScore = 0;
+  }
+
+  const modifier = (emblem.modifier || 100) / 100;
+  return Math.round(baseScore * modifier * 100) / 100;
+}
+
+export function calculateGameFantasyPoints(
+  stats: Partial<PlayerStats>,
+  selectedEmblemIds: string[]
+): number {
+  if (!selectedEmblemIds || selectedEmblemIds.length === 0) return 0;
+  const activeIds = selectedEmblemIds.slice(0, 3);
+  let total = 0;
+  for (const emblemId of activeIds) {
+    total += calculateEmblemPoints(emblemId, stats);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+export function calculateBestGameFantasyPoints(
+  gamesStats: Partial<PlayerStats>[],
+  selectedEmblemIds: string[]
+): { bestScore: number; bestGameIndex: number; gameScores: number[] } {
+  if (!gamesStats || gamesStats.length === 0 || !selectedEmblemIds || selectedEmblemIds.length === 0) {
+    return { bestScore: 0, bestGameIndex: -1, gameScores: [] };
+  }
+
+  const gameScores = gamesStats.map((st) => calculateGameFantasyPoints(st, selectedEmblemIds));
+  let bestScore = gameScores[0];
+  let bestGameIndex = 0;
+
+  for (let i = 1; i < gameScores.length; i++) {
+    if (gameScores[i] > bestScore) {
+      bestScore = gameScores[i];
+      bestGameIndex = i;
+    }
+  }
+
+  return {
+    bestScore: Math.round(bestScore * 100) / 100,
+    bestGameIndex,
+    gameScores,
+  };
+}
+
+export function calculateFantasyPoints(
+  stats: Partial<PlayerStats>,
+  emblemsOrTraits: any[] = [],
+  _quality: CardQuality = "common",
+  _titleName = "Стальной"
+): number {
+  if (Array.isArray(emblemsOrTraits) && emblemsOrTraits.length > 0 && typeof emblemsOrTraits[0] === "string") {
+    return calculateGameFantasyPoints(stats, emblemsOrTraits as string[]);
+  }
+
+  if (Array.isArray(emblemsOrTraits) && emblemsOrTraits.length > 0 && typeof emblemsOrTraits[0] === "object" && emblemsOrTraits[0]?.id && VALVE_FANTASY_EMBLEMS[emblemsOrTraits[0].id]) {
+    const ids = emblemsOrTraits.map((t) => t.id);
+    return calculateGameFantasyPoints(stats, ids);
+  }
+
+  const defaultKeys = ["creepScore", "deaths", "towerKills"];
+  return calculateGameFantasyPoints(stats, defaultKeys);
+}
 
 export function getRandomQuality(): CardQuality {
-  const roll = Math.random();
-  if (roll < 0.05) return "immortal"; // 5%
-  if (roll < 0.25) return "epic";     // 20%
-  if (roll < 0.60) return "rare";     // 35%
-  return "common";                    // 40%
+  return "common";
 }
 
 export function getRandomTitle(): string {
-  const title = CARD_TITLES[Math.floor(Math.random() * CARD_TITLES.length)];
-  return title.name;
+  return "Стальной";
 }
 
 export function rollRandomTraits(
   count = 3,
-  quality: CardQuality = "common",
-  existingTraits: RolledTrait[] = []
+  _quality: CardQuality = "common",
+  _existingTraits: RolledTrait[] = []
 ): RolledTrait[] {
-  const qualityCfg = CARD_QUALITIES[quality] || CARD_QUALITIES.common;
   const result: RolledTrait[] = [];
-
-  // Preserve locked traits
-  const lockedTraits = existingTraits.filter((t) => t.locked);
-  const lockedIds = new Set(lockedTraits.map((t) => t.id));
-  result.push(...lockedTraits);
-
-  const neededCount = Math.max(0, count - lockedTraits.length);
-  const availablePool = FANTASY_TRAITS_POOL.filter((t) => !lockedIds.has(t.id));
-  const shuffled = [...availablePool].sort(() => Math.random() - 0.5);
-  const selected = shuffled.slice(0, neededCount);
-
-  for (const trait of selected) {
-    const min = Math.max(trait.minBonus, qualityCfg.minBonus);
-    const max = Math.max(trait.maxBonus, qualityCfg.maxBonus);
-    const bonus = Math.floor(Math.random() * (max - min + 1)) + min;
-
+  const defaultKeys = ["creepScore", "deaths", "towerKills"];
+  for (let i = 0; i < count; i++) {
+    const key = defaultKeys[i % defaultKeys.length];
+    const def = VALVE_FANTASY_EMBLEMS[key];
     result.push({
-      id: trait.id,
-      label: trait.label,
-      bonus,
-      colorClass: trait.colorClass,
+      id: key,
+      label: def ? def.label : key,
+      bonus: 100,
+      colorClass: def?.color === "red" ? "text-red-400" : def?.color === "blue" ? "text-sky-400" : "text-emerald-400",
       locked: false,
     });
   }
-
   return result;
 }
 
-/**
- * Calculates official fantasy points using Valve TI & Battlepass.ru formula:
- * - Kills: +1.21
- * - Deaths: Math.max(0, 18.0 - 1.8 * deaths)
- * - Creep Score (Last Hits + Denies): +0.03
- * - GPM: GPM * 0.02
- * - Tower Kills: +3.40
- * - Roshan Kills: +8.50
- * - Wards: +1.13 per observer ward
- * - Stuns: +0.15 per sec
- * - First Blood: +17.00
- * - Assists: +0.60
- * - Teamfight participation: up to 18.95
- * Applies bonuses from rolled card traits, title bonus, and quality multiplier.
- */
-export function calculateFantasyPoints(
-  stats: Partial<PlayerStats>,
-  traits: RolledTrait[] = [],
-  quality: CardQuality = "common",
-  titleName = "Стальной"
-): number {
-  let bonusKills = 0;
-  let bonusDeaths = 0;
-  let bonusCs = 0;
-  let bonusGpm = 0;
-  let bonusWards = 0;
-  let bonusTowers = 0;
-  let bonusRoshan = 0;
-  let bonusFb = 0;
-  let bonusStuns = 0;
-  let bonusAssists = 0;
-  let bonusTeamfight = 0;
-  let bonusRunes = 0;
-
-  for (const t of traits) {
-    const fraction = (t.bonus || 0) / 100;
-    if (t.id === "kills") bonusKills += fraction;
-    if (t.id === "deaths") bonusDeaths += fraction;
-    if (t.id === "creep_score") bonusCs += fraction;
-    if (t.id === "gpm") bonusGpm += fraction;
-    if (t.id === "wards") bonusWards += fraction;
-    if (t.id === "towers") bonusTowers += fraction;
-    if (t.id === "roshan") bonusRoshan += fraction;
-    if (t.id === "first_blood") bonusFb += fraction;
-    if (t.id === "stuns") bonusStuns += fraction;
-    if (t.id === "assists") bonusAssists += fraction;
-    if (t.id === "teamfight") bonusTeamfight += fraction;
-    if (t.id === "runes") bonusRunes += fraction;
-  }
-
-  // Title extra bonus
-  const matchedTitle = CARD_TITLES.find((t) => t.name === titleName);
-  if (matchedTitle) {
-    const tFraction = matchedTitle.bonusPercent / 100;
-    if (matchedTitle.bonusType === "kills") { bonusKills += tFraction; bonusFb += tFraction; }
-    if (matchedTitle.bonusType === "survival") { bonusDeaths += tFraction; bonusCs += tFraction; }
-    if (matchedTitle.bonusType === "cs") { bonusCs += tFraction; bonusGpm += tFraction; }
-    if (matchedTitle.bonusType === "objectives") { bonusTowers += tFraction; bonusRoshan += tFraction; }
-    if (matchedTitle.bonusType === "deaths") { bonusDeaths += tFraction; }
-    if (matchedTitle.bonusType === "support") { bonusStuns += tFraction; bonusWards += tFraction; }
-    if (matchedTitle.bonusType === "vision") { bonusWards += tFraction; bonusRunes += tFraction; }
-  }
-
-  const kills = Number(stats.kills) || 0;
-  const deaths = Number(stats.deaths) || 0;
-  const assists = Number(stats.assists) || 0;
-  const lastHits = Number(stats.last_hits) || 0;
-  const denies = Number(stats.denies) || 0;
-  const gpm = Number(stats.gpm) || 0;
-  const wardsPlaced = Number(stats.wards_placed) || 0;
-  const wardsDestroyed = Number(stats.wards_destroyed) || 0;
-  const towerKills = Number(stats.tower_kills) || 0;
-  const roshanKills = Number(stats.roshan_kills) || 0;
-  const firstBlood = Boolean(stats.first_blood);
-  const stuns = Number(stats.stuns) || 0;
-  const runes = Number(stats.runes_grabbed) || 0;
-  const teamfightPct = Number(stats.teamfight_pct) || 0.6; // default 60% if not tracked
-
-  // Battlepass.ru exact formula weights
-  const killsPts = (kills * 1.21) * (1 + bonusKills);
-  const deathPenalty = (deaths * 1.80) * (1 - Math.min(0.8, bonusDeaths));
-  const deathsPts = Math.max(0, 18.00 - deathPenalty);
-  const csPts = ((lastHits + denies) * 0.03) * (1 + bonusCs);
-  const gpmPts = (gpm * 0.02) * (1 + bonusGpm);
-  const wardsPts = ((wardsPlaced + wardsDestroyed) * 1.13) * (1 + bonusWards);
-  const towersPts = (towerKills * 3.40) * (1 + bonusTowers);
-  const roshanPts = (roshanKills * 8.50) * (1 + bonusRoshan);
-  const fbPts = (firstBlood ? 17.00 : 0) * (1 + bonusFb);
-  const assistsPts = (assists * 0.60) * (1 + bonusAssists);
-  const stunsPts = (stuns * 0.15) * (1 + bonusStuns);
-  const runesPts = (runes * 1.21) * (1 + bonusRunes);
-  const teamfightPts = (teamfightPct * 18.95) * (1 + bonusTeamfight);
-
-  let rawTotal = killsPts + deathsPts + csPts + gpmPts + wardsPts + towersPts + roshanPts + fbPts + assistsPts + stunsPts + runesPts + teamfightPts;
-
-  // Title 'all' bonus (e.g. Легендарный)
-  if (matchedTitle?.bonusType === "all") {
-    rawTotal *= (1 + matchedTitle.bonusPercent / 100);
-  }
-
-  // Quality multiplier (Rare: x1.1, Epic: x1.25, Immortal: x1.4)
-  const qualityCfg = CARD_QUALITIES[quality] || CARD_QUALITIES.common;
-  const finalTotal = rawTotal * qualityCfg.bonusMultiplier;
-
-  return Math.round(finalTotal * 100) / 100;
-}
+export const FANTASY_TRAITS_POOL = Object.values(VALVE_FANTASY_EMBLEMS).map((emb) => ({
+  id: emb.id,
+  label: emb.label,
+  category: emb.color === "red" ? "kills" : emb.color === "blue" ? "support" : "combat",
+  colorClass: emb.color === "red" ? "text-red-400 bg-red-950/60 border-red-500/40" : emb.color === "blue" ? "text-sky-400 bg-sky-950/60 border-sky-500/40" : "text-emerald-400 bg-emerald-950/60 border-emerald-500/40",
+  minBonus: 100,
+  maxBonus: 100,
+}));

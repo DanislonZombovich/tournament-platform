@@ -1,129 +1,176 @@
 import assert from "node:assert/strict";
 import {
+  calculateBestGameFantasyPoints,
+  calculateEmblemPoints,
   calculateFantasyPoints,
-  FANTASY_TRAITS_POOL,
+  calculateGameFantasyPoints,
+  DEFAULT_ROLE_EMBLEMS,
   PlayerStats,
-  RolledTrait,
-  rollRandomTraits,
-  CARD_QUALITIES,
-  CARD_TITLES,
+  VALVE_FANTASY_EMBLEMS,
 } from "../lib/fantasy";
 
-function testRollRandomTraits() {
-  const traits = rollRandomTraits(3, "common");
-  assert.equal(traits.length, 3);
+function testAll18EmblemsExist() {
+  const keys = Object.keys(VALVE_FANTASY_EMBLEMS);
+  assert.equal(keys.length, 18);
 
-  const ids = new Set(traits.map((t) => t.id));
-  assert.equal(ids.size, 3);
+  const expectedIds = [
+    "creepScore",
+    "gpm",
+    "deaths",
+    "towerKills",
+    "kills",
+    "madstones",
+    "campsStacked",
+    "runes",
+    "lotuses",
+    "watchers",
+    "obsPlaced",
+    "smokes",
+    "teamfight",
+    "stuns",
+    "firstblood",
+    "tormentorKills",
+    "roshanKills",
+    "courierKills",
+  ];
 
-  for (const t of traits) {
-    const def = FANTASY_TRAITS_POOL.find((p) => p.id === t.id);
-    assert.ok(def);
-    assert.ok(t.bonus >= 10);
-    assert.ok(t.label.length > 0);
+  for (const id of expectedIds) {
+    const emblem = VALVE_FANTASY_EMBLEMS[id];
+    assert.ok(emblem, `Emblem ${id} must exist`);
+    assert.equal(emblem.id, id);
+    assert.equal(emblem.modifier, 100, `Emblem ${id} modifier must be 100%`);
+    assert.ok(emblem.label.length > 0);
+    assert.ok(["red", "blue", "green"].includes(emblem.color));
   }
 }
 
-function testTraitLocking() {
-  const initialTraits: RolledTrait[] = [
-    { id: "kills", label: "Убийства", bonus: 35, colorClass: "", locked: true },
-    { id: "deaths", label: "Смерти", bonus: 20, colorClass: "", locked: false },
-    { id: "gpm", label: "GPM", bonus: 15, colorClass: "", locked: false },
-  ];
-
-  const rerolled = rollRandomTraits(3, "common", initialTraits);
-  assert.equal(rerolled.length, 3);
-
-  // The locked trait must remain intact with identical id, bonus and locked flag
-  const lockedOne = rerolled.find((t) => t.id === "kills");
-  assert.ok(lockedOne);
-  assert.equal(lockedOne.bonus, 35);
-  assert.equal(lockedOne.locked, true);
-}
-
-function testCalculateFantasyPointsBase() {
+function testValveEmblemCalculations() {
   const stats: PlayerStats = {
     kills: 10,
-    deaths: 2,
-    assists: 10,
-    last_hits: 200,
+    deaths: 3,
+    assists: 15,
+    last_hits: 300,
     denies: 10,
-    gpm: 600,
-    wards_placed: 4,
-    wards_destroyed: 2,
-    tower_kills: 2,
-    roshan_kills: 1,
+    gpm: 750,
+    wards_placed: 8,
+    tower_kills: 4,
+    roshan_kills: 2,
     first_blood: true,
-    stuns: 20,
-    teamfight_pct: 0.6,
+    stuns: 35,
+    madstones: 12,
+    camps_stacked: 6,
+    runes: 7,
+    watchers: 5,
+    lotuses: 4,
+    smokes: 3,
+    teamfight_pct: 0.75,
+    tormentor_kills: 1,
+    courier_kills: 2,
   };
 
-  const pts = calculateFantasyPoints(stats, [], "common", "None");
-  assert.ok(pts > 50);
-
-  // Exact battlepass formula:
-  // Kills: 10 * 1.21 = 12.1
-  // Deaths: 18 - 2 * 1.8 = 14.4
-  // CS: 210 * 0.03 = 6.3
-  // GPM: 600 * 0.02 = 12.0
-  // Wards: 6 * 1.13 = 6.78
-  // Towers: 2 * 3.40 = 6.80
-  // Roshan: 1 * 8.50 = 8.50
-  // FB: 17.00
-  // Assists: 10 * 0.60 = 6.00
-  // Stuns: 20 * 0.15 = 3.00
-  // Teamfight: 0.6 * 18.95 = 11.37
-  // Total: 104.25
-  const killsPts = 10 * 1.21;
-  const deathsPts = Math.max(0, 18.00 - (2 * 1.80));
-  const csPts = 210 * 0.03;
-  const gpmPts = 600 * 0.02;
-  const wardsPts = 6 * 1.13;
-  const towerPts = 2 * 3.40;
-  const roshanPts = 1 * 8.50;
-  const fbPts = 17.00;
-  const assistsPts = 10 * 0.60;
-  const stunsPts = 20 * 0.15;
-  const tfPts = 0.6 * 18.95;
-
-  const expected = Math.round((killsPts + deathsPts + csPts + gpmPts + wardsPts + towerPts + roshanPts + fbPts + assistsPts + stunsPts + tfPts) * 100) / 100;
-  assert.equal(pts, expected);
+  assert.equal(calculateEmblemPoints("creepScore", stats), 300 * 3);
+  assert.equal(calculateEmblemPoints("gpm", stats), 750 * 2);
+  assert.equal(calculateEmblemPoints("deaths", stats), 1950 - 3 * 195);
+  assert.equal(calculateEmblemPoints("towerKills", stats), 4 * 352);
+  assert.equal(calculateEmblemPoints("kills", stats), 10 * 107);
+  assert.equal(calculateEmblemPoints("madstones", stats), 12 * 13);
+  assert.equal(calculateEmblemPoints("campsStacked", stats), 6 * 234);
+  assert.equal(calculateEmblemPoints("runes", stats), 7 * 141);
+  assert.equal(calculateEmblemPoints("watchers", stats), 5 * 147);
+  assert.equal(calculateEmblemPoints("lotuses", stats), 4 * 176);
+  assert.equal(calculateEmblemPoints("obsPlaced", stats), 8 * 117);
+  assert.equal(calculateEmblemPoints("smokes", stats), 3 * 293);
+  assert.equal(calculateEmblemPoints("teamfight", stats), Math.round(0.75 * 2124));
+  assert.equal(calculateEmblemPoints("stuns", stats), 35 * 10);
+  assert.equal(calculateEmblemPoints("firstblood", stats), 1934);
+  assert.equal(calculateEmblemPoints("tormentorKills", stats), 1 * 879);
+  assert.equal(calculateEmblemPoints("roshanKills", stats), 2 * 1172);
+  assert.equal(calculateEmblemPoints("courierKills", stats), 2 * 703);
 }
 
-function testCalculateFantasyPointsQualityMultiplier() {
-  const stats: PlayerStats = {
-    kills: 10,
-    deaths: 0,
-    assists: 0,
-    last_hits: 0,
-    denies: 0,
-    gpm: 0,
-    wards_placed: 0,
-    wards_destroyed: 0,
-    tower_kills: 0,
-    roshan_kills: 0,
-    first_blood: false,
-    stuns: 0,
-    teamfight_pct: 0,
+function testDeathsCanGoNegative() {
+  const badGameStats: Partial<PlayerStats> = {
+    deaths: 12,
+  };
+  const pts = calculateEmblemPoints("deaths", badGameStats);
+  assert.equal(pts, 1950 - 12 * 195);
+  assert.ok(pts < 0);
+}
+
+function testThreeEmblemsSelection() {
+  const stats: Partial<PlayerStats> = {
+    last_hits: 200,
+    deaths: 2,
+    tower_kills: 3,
   };
 
-  const commonPts = calculateFantasyPoints(stats, [], "common", "None");
-  const rarePts = calculateFantasyPoints(stats, [], "rare", "None");
-  const epicPts = calculateFantasyPoints(stats, [], "epic", "None");
-  const immortalPts = calculateFantasyPoints(stats, [], "immortal", "None");
+  const selected = ["creepScore", "deaths", "towerKills"];
+  const total = calculateGameFantasyPoints(stats, selected);
 
-  assert.equal(rarePts, Math.round(commonPts * 1.1 * 100) / 100);
-  assert.equal(epicPts, Math.round(commonPts * 1.25 * 100) / 100);
-  assert.equal(immortalPts, Math.round(commonPts * 1.4 * 100) / 100);
+  const csPts = 200 * 3;
+  const deathsPts = 1950 - 2 * 195;
+  const towerPts = 3 * 352;
+  const expected = csPts + deathsPts + towerPts;
+
+  assert.equal(total, expected);
+  assert.equal(calculateFantasyPoints(stats, selected), expected);
+}
+
+function testBestGameRuleMultipleGames() {
+  const game1Stats: Partial<PlayerStats> = {
+    last_hits: 100,
+    deaths: 8,
+    tower_kills: 0,
+  };
+
+  const game2Stats: Partial<PlayerStats> = {
+    last_hits: 450,
+    deaths: 1,
+    tower_kills: 5,
+  };
+
+  const game3Stats: Partial<PlayerStats> = {
+    last_hits: 250,
+    deaths: 4,
+    tower_kills: 2,
+  };
+
+  const selectedEmblems = ["creepScore", "deaths", "towerKills"];
+
+  const g1Score = calculateGameFantasyPoints(game1Stats, selectedEmblems);
+  const g2Score = calculateGameFantasyPoints(game2Stats, selectedEmblems);
+  const g3Score = calculateGameFantasyPoints(game3Stats, selectedEmblems);
+
+  assert.ok(g2Score > g1Score);
+  assert.ok(g2Score > g3Score);
+
+  const result = calculateBestGameFantasyPoints(
+    [game1Stats, game2Stats, game3Stats],
+    selectedEmblems
+  );
+
+  assert.equal(result.bestScore, g2Score);
+  assert.equal(result.bestGameIndex, 1);
+  assert.deepEqual(result.gameScores, [g1Score, g2Score, g3Score]);
+}
+
+function testDefaultRoleEmblems() {
+  assert.ok(DEFAULT_ROLE_EMBLEMS.pos1.length === 3);
+  assert.ok(DEFAULT_ROLE_EMBLEMS.pos2.length === 3);
+  assert.ok(DEFAULT_ROLE_EMBLEMS.pos3.length === 3);
+  assert.ok(DEFAULT_ROLE_EMBLEMS.pos4.length === 3);
+  assert.ok(DEFAULT_ROLE_EMBLEMS.pos5.length === 3);
 }
 
 function runAll() {
-  console.log("Running fantasy unit tests...");
-  testRollRandomTraits();
-  testTraitLocking();
-  testCalculateFantasyPointsBase();
-  testCalculateFantasyPointsQualityMultiplier();
-  console.log("All fantasy unit tests passed! [OK]");
+  console.log("Running Valve fantasy unit tests...");
+  testAll18EmblemsExist();
+  testValveEmblemCalculations();
+  testDeathsCanGoNegative();
+  testThreeEmblemsSelection();
+  testBestGameRuleMultipleGames();
+  testDefaultRoleEmblems();
+  console.log("All Valve fantasy unit tests passed! [OK]");
 }
 
 runAll();

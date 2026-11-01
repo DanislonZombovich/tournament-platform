@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { getCurrentUser } from "@/lib/auth";
 import { advanceDoubleElimination, evaluatePredictionPoints } from "@/lib/bracket";
 import { query } from "@/lib/db";
-import { calculateFantasyPoints, PlayerStats, RolledTrait } from "@/lib/fantasy";
+import { calculateBestGameFantasyPoints, calculateFantasyPoints, DEFAULT_ROLE_EMBLEMS, PlayerStats } from "@/lib/fantasy";
 
 export async function POST(req: NextRequest) {
   try {
@@ -101,6 +101,8 @@ export async function POST(req: NextRequest) {
         let kills = 0, deaths = 0, assists = 0, last_hits = 0, denies = 0, gpm = 0;
         let wards_placed = 0, wards_destroyed = 0, tower_kills = 0, roshan_kills = 0;
         let first_blood = false, stuns = 0;
+        let madstones = 0, camps_stacked = 0, runes = 0, watchers = 0, lotuses = 0, smokes = 0;
+        let teamfight_pct = 0.6, tormentor_kills = 0, courier_kills = 0;
 
         if (p.role_slot === "pos1") {
           kills = isWinner ? Math.floor(8 + Math.random() * 8) : Math.floor(3 + Math.random() * 6);
@@ -113,6 +115,15 @@ export async function POST(req: NextRequest) {
           roshan_kills = isWinner ? Math.floor(1 + Math.random() * 2) : 0;
           first_blood = isWinner && Math.random() < 0.25;
           stuns = Math.floor(10 + Math.random() * 25);
+          madstones = Math.floor(15 + Math.random() * 20);
+          camps_stacked = Math.floor(1 + Math.random() * 4);
+          runes = Math.floor(2 + Math.random() * 5);
+          watchers = Math.floor(1 + Math.random() * 4);
+          lotuses = Math.floor(2 + Math.random() * 5);
+          smokes = Math.floor(Math.random() * 2);
+          teamfight_pct = isWinner ? 0.65 + Math.random() * 0.25 : 0.5 + Math.random() * 0.25;
+          tormentor_kills = isWinner && Math.random() < 0.4 ? 1 : 0;
+          courier_kills = Math.random() < 0.15 ? 1 : 0;
         } else if (p.role_slot === "pos2") {
           kills = isWinner ? Math.floor(9 + Math.random() * 8) : Math.floor(4 + Math.random() * 6);
           deaths = isWinner ? Math.floor(2 + Math.random() * 4) : Math.floor(4 + Math.random() * 6);
@@ -124,6 +135,15 @@ export async function POST(req: NextRequest) {
           roshan_kills = isWinner && Math.random() < 0.3 ? 1 : 0;
           first_blood = isWinner && Math.random() < 0.35;
           stuns = Math.floor(15 + Math.random() * 30);
+          madstones = Math.floor(10 + Math.random() * 18);
+          camps_stacked = Math.floor(1 + Math.random() * 3);
+          runes = Math.floor(6 + Math.random() * 8);
+          watchers = Math.floor(2 + Math.random() * 5);
+          lotuses = Math.floor(2 + Math.random() * 5);
+          smokes = Math.floor(1 + Math.random() * 2);
+          teamfight_pct = isWinner ? 0.7 + Math.random() * 0.25 : 0.55 + Math.random() * 0.25;
+          tormentor_kills = isWinner && Math.random() < 0.35 ? 1 : 0;
+          courier_kills = Math.random() < 0.2 ? 1 : 0;
         } else if (p.role_slot === "pos3") {
           kills = isWinner ? Math.floor(5 + Math.random() * 6) : Math.floor(2 + Math.random() * 5);
           deaths = isWinner ? Math.floor(3 + Math.random() * 4) : Math.floor(5 + Math.random() * 6);
@@ -135,6 +155,15 @@ export async function POST(req: NextRequest) {
           roshan_kills = 0;
           first_blood = Math.random() < 0.2;
           stuns = Math.floor(30 + Math.random() * 40);
+          madstones = Math.floor(8 + Math.random() * 15);
+          camps_stacked = Math.floor(2 + Math.random() * 5);
+          runes = Math.floor(3 + Math.random() * 6);
+          watchers = Math.floor(3 + Math.random() * 6);
+          lotuses = Math.floor(3 + Math.random() * 6);
+          smokes = Math.floor(1 + Math.random() * 3);
+          teamfight_pct = isWinner ? 0.72 + Math.random() * 0.23 : 0.58 + Math.random() * 0.25;
+          tormentor_kills = isWinner && Math.random() < 0.5 ? 1 : 0;
+          courier_kills = Math.random() < 0.15 ? 1 : 0;
         } else if (p.role_slot === "pos4") {
           kills = isWinner ? Math.floor(3 + Math.random() * 5) : Math.floor(1 + Math.random() * 4);
           deaths = isWinner ? Math.floor(3 + Math.random() * 5) : Math.floor(6 + Math.random() * 6);
@@ -148,6 +177,15 @@ export async function POST(req: NextRequest) {
           roshan_kills = 0;
           first_blood = Math.random() < 0.15;
           stuns = Math.floor(25 + Math.random() * 35);
+          madstones = Math.floor(5 + Math.random() * 10);
+          camps_stacked = Math.floor(4 + Math.random() * 8);
+          runes = Math.floor(5 + Math.random() * 7);
+          watchers = Math.floor(5 + Math.random() * 7);
+          lotuses = Math.floor(4 + Math.random() * 6);
+          smokes = Math.floor(2 + Math.random() * 4);
+          teamfight_pct = isWinner ? 0.75 + Math.random() * 0.22 : 0.6 + Math.random() * 0.25;
+          tormentor_kills = isWinner && Math.random() < 0.3 ? 1 : 0;
+          courier_kills = Math.random() < 0.25 ? 1 : 0;
         } else {
           kills = isWinner ? Math.floor(1 + Math.random() * 3) : Math.floor(Math.random() * 3);
           deaths = isWinner ? Math.floor(4 + Math.random() * 5) : Math.floor(7 + Math.random() * 6);
@@ -161,6 +199,15 @@ export async function POST(req: NextRequest) {
           roshan_kills = 0;
           first_blood = Math.random() < 0.1;
           stuns = Math.floor(20 + Math.random() * 30);
+          madstones = Math.floor(3 + Math.random() * 8);
+          camps_stacked = Math.floor(3 + Math.random() * 7);
+          runes = Math.floor(4 + Math.random() * 6);
+          watchers = Math.floor(6 + Math.random() * 8);
+          lotuses = Math.floor(3 + Math.random() * 5);
+          smokes = Math.floor(2 + Math.random() * 4);
+          teamfight_pct = isWinner ? 0.75 + Math.random() * 0.22 : 0.6 + Math.random() * 0.25;
+          tormentor_kills = isWinner && Math.random() < 0.2 ? 1 : 0;
+          courier_kills = Math.random() < 0.3 ? 1 : 0;
         }
 
         finalStats.push({
@@ -179,6 +226,15 @@ export async function POST(req: NextRequest) {
             roshan_kills,
             first_blood,
             stuns,
+            madstones,
+            camps_stacked,
+            runes,
+            watchers,
+            lotuses,
+            smokes,
+            teamfight_pct,
+            tormentor_kills,
+            courier_kills,
           },
         });
       }
@@ -187,15 +243,20 @@ export async function POST(req: NextRequest) {
     await query(`DELETE FROM match_player_stats WHERE match_id = $1`, [match.id]);
 
     for (const item of finalStats) {
-      const rawPoints = calculateFantasyPoints(item.stats, []);
+      const rawPoints = calculateFantasyPoints(item.stats, DEFAULT_ROLE_EMBLEMS[item.role_slot] || []);
       const statId = "mps_" + crypto.randomBytes(8).toString("hex");
 
       await query(
         `INSERT INTO match_player_stats (
           id, match_id, player_id, role_slot, kills, deaths, assists,
           last_hits, denies, gpm, wards_placed, wards_destroyed,
-          tower_kills, roshan_kills, first_blood, stuns, raw_fantasy_points
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+          tower_kills, roshan_kills, first_blood, stuns,
+          madstones, camps_stacked, runes, watchers, lotuses, smokes,
+          teamfight_pct, tormentor_kills, courier_kills, raw_fantasy_points
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+          $17, $18, $19, $20, $21, $22, $23, $24, $25, $26
+        )`,
         [
           statId,
           match.id,
@@ -208,17 +269,25 @@ export async function POST(req: NextRequest) {
           item.stats.denies,
           item.stats.gpm,
           item.stats.wards_placed,
-          item.stats.wards_destroyed,
+          item.stats.wards_destroyed || 0,
           item.stats.tower_kills,
           item.stats.roshan_kills,
           item.stats.first_blood,
           item.stats.stuns,
+          item.stats.madstones || 0,
+          item.stats.camps_stacked || 0,
+          item.stats.runes || 0,
+          item.stats.watchers || 0,
+          item.stats.lotuses || 0,
+          item.stats.smokes || 0,
+          item.stats.teamfight_pct || 0.6,
+          item.stats.tormentor_kills || 0,
+          item.stats.courier_kills || 0,
           rawPoints,
         ]
       );
     }
 
-    // Update match score and completion status
     await query(
       `UPDATE matches
        SET team1_score = $1, team2_score = $2, winner_id = $3, status = 'completed'
@@ -228,7 +297,6 @@ export async function POST(req: NextRequest) {
 
     await advanceDoubleElimination(match.tournament_id, match.match_code, winner_id, loserId);
 
-    // Calculate predictions for this match
     const predictionsRes = await query<{
       id: string;
       user_id: string;
@@ -257,14 +325,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Deterministically recalculate all fantasy cards for this tournament from completed matches
     const allCardsRes = await query<{
       id: string;
       role_slot: string;
       selected_player_id: string | null;
       traits: any;
+      emblems: any;
     }>(
-      `SELECT id, role_slot, selected_player_id, traits FROM fantasy_cards WHERE tournament_id = $1`,
+      `SELECT id, role_slot, selected_player_id, traits, emblems FROM fantasy_cards WHERE tournament_id = $1`,
       [match.tournament_id]
     );
 
@@ -274,49 +342,50 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      let traits: RolledTrait[] = [];
-      if (typeof card.traits === "string") {
+      let emblemIds: string[] = [];
+      if (Array.isArray(card.emblems) && card.emblems.length > 0) {
+        emblemIds = card.emblems;
+      } else if (typeof card.emblems === "string" && card.emblems !== "[]" && card.emblems.trim() !== "") {
         try {
-          traits = JSON.parse(card.traits);
+          emblemIds = JSON.parse(card.emblems);
         } catch {}
-      } else if (Array.isArray(card.traits)) {
-        traits = card.traits;
       }
 
-      const pStatsRes = await query<{
-        kills: number;
-        deaths: number;
-        assists: number;
-        last_hits: number;
-        denies: number;
-        gpm: number;
-        wards_placed: number;
-        wards_destroyed: number;
-        tower_kills: number;
-        roshan_kills: number;
-        first_blood: boolean;
-        stuns: number;
-      }>(
+      if (emblemIds.length === 0) {
+        if (typeof card.traits === "string" && card.traits.trim() !== "") {
+          try {
+            const parsed = JSON.parse(card.traits);
+            if (Array.isArray(parsed)) {
+              emblemIds = parsed.map((t: any) => (typeof t === "string" ? t : t.id)).filter(Boolean);
+            }
+          } catch {}
+        } else if (Array.isArray(card.traits)) {
+          emblemIds = card.traits.map((t: any) => (typeof t === "string" ? t : t.id)).filter(Boolean);
+        }
+      }
+
+      if (emblemIds.length === 0) {
+        emblemIds = DEFAULT_ROLE_EMBLEMS[card.role_slot] || ["creepScore", "deaths", "towerKills"];
+      }
+
+      const pStatsRes = await query<PlayerStats>(
         `SELECT mps.* FROM match_player_stats mps
          JOIN matches m ON m.id = mps.match_id
          WHERE m.tournament_id = $1 AND m.status = 'completed' AND mps.player_id = $2`,
         [match.tournament_id, card.selected_player_id]
       );
 
-      let totalCardPoints = 0;
-      for (const s of pStatsRes.rows) {
-        totalCardPoints += calculateFantasyPoints(s, traits);
-      }
+      const bestGameResult = calculateBestGameFantasyPoints(pStatsRes.rows, emblemIds);
 
       await query(
         `UPDATE fantasy_cards SET points_earned = $1 WHERE id = $2`,
-        [Math.round(totalCardPoints * 100) / 100, card.id]
+        [bestGameResult.bestScore, card.id]
       );
     }
 
     return NextResponse.json({
       success: true,
-      message: `Результат матча ${match.match_code} сохранен! Очки фэнтези и прогнозов начислены, сетка обновлена.`,
+      message: `Результат матча ${match.match_code} сохранен! Очки фэнтези лучшей игры и прогнозов начислены, сетка обновлена.`,
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
