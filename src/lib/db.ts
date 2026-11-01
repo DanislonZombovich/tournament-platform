@@ -84,6 +84,9 @@ export async function initDb() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_username TEXT;
       ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_avatar TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_email TEXT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS google_avatar TEXT;
 
       ALTER TABLE fantasy_cards ADD COLUMN IF NOT EXISTS quality TEXT DEFAULT 'common';
       ALTER TABLE fantasy_cards ADD COLUMN IF NOT EXISTS title TEXT DEFAULT 'Стальной';

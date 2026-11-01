@@ -6,14 +6,21 @@ import { getCurrentUser, createSessionToken, setSessionCookie, UserSession } fro
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get("code");
   const error = req.nextUrl.searchParams.get("error");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || `${req.nextUrl.protocol}//${req.nextUrl.host}`;
+  const host =
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    "localhost:3000";
+  const protocol =
+    req.headers.get("x-forwarded-proto") ||
+    (host.startsWith("localhost") ? "http" : "https");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
 
   if (error || !code) {
     return NextResponse.redirect(`${appUrl}/?auth_error=${encodeURIComponent(error || "no_code")}`);
   }
 
-  const clientId = process.env.DISCORD_CLIENT_ID || "1566128752688373931";
-  const clientSecret = process.env.DISCORD_CLIENT_SECRET || "ehmFf6x86jM-PMIQV2nodwHxxqnn4F4_";
+  const clientId = process.env.DISCORD_CLIENT_ID || "";
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET || "";
   const redirectUri = `${appUrl}/api/auth/discord/callback`;
 
   try {

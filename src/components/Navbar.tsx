@@ -121,6 +121,12 @@ export default function Navbar() {
                       alt={user.username}
                       className="w-7 h-7 rounded-lg object-cover border border-[#5865F2]"
                     />
+                  ) : user.google_avatar ? (
+                    <img
+                      src={user.google_avatar}
+                      alt={user.username}
+                      className="w-7 h-7 rounded-lg object-cover border border-emerald-400/50"
+                    />
                   ) : (
                     <div className="w-7 h-7 rounded-lg bg-blue-900 flex items-center justify-center text-xs font-bold text-cyan-300">
                       {user.username.slice(0, 2).toUpperCase()}
@@ -152,22 +158,10 @@ export default function Navbar() {
             ) : (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    setAuthMode("login");
-                    setIsAuthOpen(true);
-                  }}
-                  className="px-3.5 py-1.5 text-xs font-bold text-slate-300 hover:text-white bg-[#0e1a33] hover:bg-[#15274d] rounded-lg border border-blue-900/60 transition"
+                  onClick={() => setIsAuthOpen(true)}
+                  className="px-4 py-1.5 text-xs font-extrabold text-white bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-lg shadow-md shadow-blue-500/25 transition flex items-center gap-1.5"
                 >
-                  Вход
-                </button>
-                <button
-                  onClick={() => {
-                    setAuthMode("register");
-                    setIsAuthOpen(true);
-                  }}
-                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 rounded-lg shadow-md shadow-blue-500/25 transition"
-                >
-                  Регистрация
+                  <span>Войти</span>
                 </button>
               </div>
             )}

@@ -20,6 +20,9 @@ export interface UserSession {
   discord_id?: string | null;
   discord_username?: string | null;
   discord_avatar?: string | null;
+  google_id?: string | null;
+  google_email?: string | null;
+  google_avatar?: string | null;
   fantasy_tokens?: number;
 }
 
@@ -70,7 +73,7 @@ export async function getCurrentUser(): Promise<UserSession | null> {
     if (!userId) return null;
 
     const res = await query<UserSession>(
-      `SELECT id, username, email, role, steam_id, steam_name, steam_avatar, discord_id, discord_username, discord_avatar, fantasy_tokens
+      `SELECT id, username, email, role, steam_id, steam_name, steam_avatar, discord_id, discord_username, discord_avatar, google_id, google_email, google_avatar, fantasy_tokens
        FROM users WHERE id = $1`,
       [userId]
     );
