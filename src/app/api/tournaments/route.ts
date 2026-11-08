@@ -1,0 +1,759 @@
+import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+import { getCurrentUser } from "@/lib/auth";
+import { query } from "@/lib/db";
+import { generateMatchesForTournament } from "@/lib/bracket";
+
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const requestedId = searchParams.get("id") || searchParams.get("tournament_id");
+    const signupToken = searchParams.get("signup_token");
+
+    // Dedicated lookup by unique signup_token for invited teams
+    if (signupToken) {
+      const tokenTournRes = await query<any>(
+        `SELECT t.*, 
+                (SELECT COUNT(*) FROM tournament_teams tt WHERE tt.tournament_id = t.id) AS teams_count
+         FROM tournaments t
+         WHERE t.signup_token = $1`,
+        [signupToken.trim()]
+      );
+
+      if (tokenTournRes.rows.length === 0) {
+        return NextResponse.json({ error: "Недействительная или устаревшая ссылка регистрации на турнир" }, { status: 404 });
+      }
+
+      const targetTourn = tokenTournRes.rows[0];
+      const teamsRes = await query<{
+        team_id: string;
+        name: string;
+        tag: string;
+        logo_url: string;
+        seed: number | null;
+      }>(
+        `SELECT t.id AS team_id, t.name, t.tag, t.logo_url, tt.seed
+         FROM tournament_teams tt
+         JOIN teams t ON t.id = tt.team_id
+         WHERE tt.tournament_id = $1
+         ORDER BY tt.seed ASC NULLS LAST, tt.created_at ASC`,
+        [targetTourn.id]
+      );
+
+      return NextResponse.json({
+        tournament: targetTourn,
+        registered_teams: teamsRes.rows,
+        valid_signup_token: signupToken.trim(),
+      });
+    }
+
+    // Fetch all tournaments for the list/selector
+    const allTournamentsRes = await query<{
+      id: string;
+      title: string;
+      description: string | null;
+      format: string;
+      max_teams: number;
+      is_public: boolean;
+      access_code: string | null;
+      signup_token?: string | null;
+      prize_pool: string | null;
+      banner_url: string | null;
+      status: string;
+      creator_id?: string | null;
+      is_fantasy_locked: boolean;
+      is_predictions_locked: boolean;
+      created_at: string;
+      teams_count: string;
+    }>(
+      `SELECT t.*, 
+              (SELECT COUNT(*) FROM tournament_teams tt WHERE tt.tournament_id = t.id) AS teams_count
+       FROM tournaments t
+       ORDER BY t.created_at DESC`
+    );
+
+    const tournamentsList = allTournamentsRes.rows;
+
+    // Pick active tournament: either requested by ID or default to 'ti-2026-main' or first available
+    let activeTournament = tournamentsList.find((t) => t.id === requestedId);
+    if (!activeTournament && !requestedId) {
+      activeTournament = tournamentsList.find((t) => t.id === "ti-2026-main") || tournamentsList[0];
+    }
+
+    if (!activeTournament && requestedId) {
+      return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+    }
+
+    let registeredTeams: any[] = [];
+    let matches: any[] = [];
+
+    if (activeTournament) {
+      const teamsRes = await query<{
+        team_id: string;
+        name: string;
+        tag: string;
+        logo_url: string;
+        seed: number | null;
+      }>(
+        `SELECT t.id AS team_id, t.name, t.tag, t.logo_url, tt.seed
+         FROM tournament_teams tt
+         JOIN teams t ON t.id = tt.team_id
+         WHERE tt.tournament_id = $1
+         ORDER BY tt.seed ASC NULLS LAST, tt.created_at ASC`,
+        [activeTournament.id]
+      );
+      registeredTeams = teamsRes.rows;
+
+      const matchesRes = await query<{
+        id: string;
+        match_code: string;
+        bracket_type: string;
+        round_name: string;
+        team1_id: string | null;
+        team2_id: string | null;
+        team1_score: number;
+        team2_score: number;
+        winner_id: string | null;
+        status: string;
+        match_order: number;
+        team1_name: string | null;
+        team1_tag: string | null;
+        team1_logo: string | null;
+        team2_name: string | null;
+        team2_tag: string | null;
+        team2_logo: string | null;
+      }>(
+        `SELECT m.*,
+                t1.name AS team1_name, t1.tag AS team1_tag, t1.logo_url AS team1_logo,
+                t2.name AS team2_name, t2.tag AS team2_tag, t2.logo_url AS team2_logo
+         FROM matches m
+         LEFT JOIN teams t1 ON t1.id = m.team1_id
+         LEFT JOIN teams t2 ON t2.id = m.team2_id
+         WHERE m.tournament_id = $1
+         ORDER BY m.match_order ASC`,
+        [activeTournament.id]
+      );
+      matches = matchesRes.rows;
+    }
+
+    const user = await getCurrentUser();
+    const isAdmin = Boolean(user && user.role === "admin");
+
+    const sanitizedTournaments = tournamentsList.map((t) => {
+      const isCreator = Boolean(user && t.creator_id && user.id === t.creator_id);
+      if (!isAdmin && !isCreator) {
+        return {
+          ...t,
+          signup_token: null,
+          access_code: null,
+        };
+      }
+      return t;
+    });
+
+    let sanitizedActive: any = activeTournament;
+    if (activeTournament) {
+      const isCreator = Boolean(user && activeTournament.creator_id && user.id === activeTournament.creator_id);
+      if (!isAdmin && !isCreator) {
+        sanitizedActive = {
+          ...activeTournament,
+          signup_token: null,
+          access_code: null,
+        };
+      }
+    }
+
+    return NextResponse.json({
+      tournament: sanitizedActive,
+      tournaments: sanitizedTournaments,
+      registered_teams: registeredTeams,
+      matches,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    }
+
+    const body = await req.json();
+
+    // 1. Action: CREATE NEW TOURNAMENT
+    if (body.action === "create" || (body.title && !body.team_id && !body.id && body.action !== "update" && body.action !== "edit")) {
+      // Restrict tournament creation strictly to admin / Danislon_Zombovich
+      if (user.role !== "admin") {
+        return NextResponse.json(
+          { error: "Только администратор может создавать новые турниры" },
+          { status: 403 }
+        );
+      }
+
+      const {
+        title,
+        description,
+        format = "double_elimination",
+        max_teams = 8,
+        is_public = true,
+        access_code,
+        prize_pool = "$50,000",
+        banner_url = "/banner.jpg",
+        grand_final_format = "two_matches",
+        split_participants_losers = false,
+        break_ties_placement = false,
+        registration_type = "public_page",
+        entry_fee_type = "free",
+        teams_required = true,
+        min_team_size = 5,
+        max_team_size = 7,
+        allow_incomplete_teams = false,
+        participant_cap = 8,
+        start_time,
+        start_time_tentative = true,
+        open_voting_all = false,
+        predictions_bracket = true,
+        predict_lower_bracket = true,
+        prediction_scoring_type = "exponential",
+        allow_predictions_pre_tournament = false,
+        exp_shareable_images = false,
+        exp_require_verified_emails = false,
+        exp_allow_specific_countries = false,
+        exp_custom_prediction_fields = false,
+        initial_rerolls = 20,
+      } = body;
+
+      if (!title || typeof title !== "string" || title.trim().length < 3) {
+        return NextResponse.json({ error: "Название турнира должно содержать от 3 символов" }, { status: 400 });
+      }
+
+      const tournamentId = "tourn_" + crypto.randomBytes(6).toString("hex");
+      const cleanTitle = title.trim();
+      const cleanDesc = description ? description.trim() : `Турнир по Dota 2: ${cleanTitle}`;
+      const numMaxTeams = Number(participant_cap || max_teams) || 8;
+
+      const signupToken = "ti26_" + crypto.randomBytes(6).toString("hex");
+
+      await query(
+        `INSERT INTO tournaments (
+          id, title, description, format, max_teams, is_public, access_code, prize_pool, banner_url, creator_id, status,
+          grand_final_format, split_participants_losers, break_ties_placement, registration_type, entry_fee_type,
+          teams_required, min_team_size, max_team_size, allow_incomplete_teams, participant_cap,
+          start_time, start_time_tentative, open_voting_all, predictions_bracket, predict_lower_bracket,
+          prediction_scoring_type, allow_predictions_pre_tournament,
+          exp_shareable_images, exp_require_verified_emails, exp_allow_specific_countries, exp_custom_prediction_fields,
+          initial_rerolls, signup_token
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'registration',
+          $11, $12, $13, $14, $15, $16, $17, $18, $19, $20,
+          $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32,
+          $33, $34
+        )`,
+        [
+          tournamentId,
+          cleanTitle,
+          cleanDesc,
+          format,
+          numMaxTeams,
+          Boolean(is_public),
+          access_code || null,
+          prize_pool,
+          banner_url,
+          user.id,
+          grand_final_format,
+          Boolean(split_participants_losers),
+          Boolean(break_ties_placement),
+          registration_type,
+          entry_fee_type,
+          Boolean(teams_required),
+          Number(min_team_size) || 5,
+          Number(max_team_size) || 7,
+          Boolean(allow_incomplete_teams),
+          Number(participant_cap) || numMaxTeams,
+          start_time || null,
+          Boolean(start_time_tentative),
+          Boolean(open_voting_all),
+          Boolean(predictions_bracket),
+          Boolean(predict_lower_bracket),
+          prediction_scoring_type,
+          Boolean(allow_predictions_pre_tournament),
+          Boolean(exp_shareable_images),
+          Boolean(exp_require_verified_emails),
+          Boolean(exp_allow_specific_countries),
+          Boolean(exp_custom_prediction_fields),
+          Number(initial_rerolls) || 20,
+          signupToken,
+        ]
+      );
+
+      // Pre-generate bracket matches
+      await generateMatchesForTournament(tournamentId, format, numMaxTeams);
+
+      return NextResponse.json({
+        success: true,
+        message: `Турнир "${cleanTitle}" успешно создан!`,
+        tournament_id: tournamentId,
+      }, { status: 201 });
+    }
+
+    // 2. Action: UPDATE / EDIT TOURNAMENT
+    if (body.action === "update" || body.action === "edit") {
+      return await handleTournamentUpdate(user, body);
+    }
+
+    // 3. Action: DELETE TOURNAMENT
+    if (body.action === "delete") {
+      return await handleTournamentDelete(user, body.tournament_id || body.id);
+    }
+
+    // 2. Action: REGISTER TEAM TO TOURNAMENT
+    const { team_id, tournament_id = "ti-2026-main", access_code, signup_token } = body;
+    if (!team_id) {
+      return NextResponse.json({ error: "Укажите команду" }, { status: 400 });
+    }
+
+    const teamRes = await query<{ id: string; captain_id: string; name: string }>(
+      `SELECT id, captain_id, name FROM teams WHERE id = $1`,
+      [team_id]
+    );
+
+    if (teamRes.rows.length === 0) {
+      return NextResponse.json({ error: "Команда не найдена" }, { status: 404 });
+    }
+
+    const team = teamRes.rows[0];
+    if (team.captain_id !== user.id && user.role !== "admin") {
+      return NextResponse.json({ error: "Только капитан команды может зарегистрировать её на турнир" }, { status: 403 });
+    }
+
+    const tournamentRes = await query<{
+      id: string;
+      title: string;
+      status: string;
+      max_teams: number;
+      is_public: boolean;
+      access_code: string | null;
+      signup_token: string | null;
+      creator_id: string | null;
+    }>(
+      `SELECT id, title, status, max_teams, is_public, access_code, signup_token, creator_id FROM tournaments WHERE id = $1`,
+      [tournament_id]
+    );
+
+    if (tournamentRes.rows.length === 0) {
+      return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+    }
+
+    const tournament = tournamentRes.rows[0];
+    if (tournament.status !== "registration") {
+      return NextResponse.json({ error: "Регистрация на турнир уже закрыта" }, { status: 400 });
+    }
+
+    const isAdminOrCreator = Boolean(
+      user.role === "admin" ||
+      (tournament.creator_id && user.id === tournament.creator_id)
+    );
+
+    // Private / closed registration rule: only via unique link (signup_token)
+    if (!tournament.is_public && !isAdminOrCreator) {
+      const providedToken = (signup_token || access_code || "").trim();
+      const validToken = (tournament.signup_token || tournament.access_code || "").trim();
+
+      if (!providedToken) {
+        return NextResponse.json(
+          { error: "Регистрация на данный турнир закрыта и доступна только по уникальной ссылке от организатора" },
+          { status: 403 }
+        );
+      }
+
+      if (providedToken !== validToken) {
+        return NextResponse.json(
+          { error: "Недействительная ссылка регистрации на данный турнир" },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Mandatory rule: Team must have 5 positions, and EVERY member must have linked Steam
+    const membersRes = await query<{
+      role_slot: string;
+      steam_id: string | null;
+      username: string;
+    }>(
+      `SELECT tm.role_slot, u.steam_id, u.username
+       FROM team_members tm
+       JOIN users u ON u.id = tm.user_id
+       WHERE tm.team_id = $1`,
+      [team.id]
+    );
+
+    const requiredRoles = ["pos1", "pos2", "pos3", "pos4", "pos5"];
+    for (const role of requiredRoles) {
+      const member = membersRes.rows.find((m) => m.role_slot === role);
+      if (!member) {
+        return NextResponse.json({
+          error: `В команде не заполнен обязательный слот роли ${role}`,
+        }, { status: 400 });
+      }
+      if (!member.steam_id) {
+        return NextResponse.json({
+          error: `У игрока ${member.username} (${role}) не привязан Steam аккаунт. Все 5 игроков команды должны иметь привязанный Steam!`,
+        }, { status: 400 });
+      }
+    }
+
+    const alreadyRegistered = await query(
+      `SELECT id FROM tournament_teams WHERE tournament_id = $1 AND team_id = $2`,
+      [tournament.id, team.id]
+    );
+
+    if (alreadyRegistered.rows.length > 0) {
+      return NextResponse.json({ error: "Команда уже зарегистрирована на этот турнир" }, { status: 400 });
+    }
+
+    const registeredCountRes = await query<{ count: string }>(
+      `SELECT COUNT(*) FROM tournament_teams WHERE tournament_id = $1`,
+      [tournament.id]
+    );
+
+    const count = parseInt(registeredCountRes.rows[0].count, 10);
+    const maxLimit = tournament.max_teams || 8;
+    if (count >= maxLimit) {
+      return NextResponse.json({ error: `Все ${maxLimit} слотов команд на турнир уже заняты` }, { status: 400 });
+    }
+
+    const entryId = "tt_" + crypto.randomBytes(8).toString("hex");
+    const seed = count + 1;
+    await query(
+      `INSERT INTO tournament_teams (id, tournament_id, team_id, seed)
+       VALUES ($1, $2, $3, $4)`,
+      [entryId, tournament.id, team.id, seed]
+    );
+
+    // If opening round matches exist with vacant slots, assign the team
+    const openingMatches = await query<{ id: string; team1_id: string | null; team2_id: string | null }>(
+      `SELECT id, team1_id, team2_id FROM matches 
+       WHERE tournament_id = $1 AND (team1_id IS NULL OR team2_id IS NULL)
+       ORDER BY match_order ASC LIMIT 1`,
+      [tournament.id]
+    );
+
+    if (openingMatches.rows.length > 0) {
+      const targetMatch = openingMatches.rows[0];
+      if (!targetMatch.team1_id) {
+        await query(`UPDATE matches SET team1_id = $1 WHERE id = $2`, [team.id, targetMatch.id]);
+      } else if (!targetMatch.team2_id) {
+        await query(`UPDATE matches SET team2_id = $1 WHERE id = $2`, [team.id, targetMatch.id]);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Команда ${team.name} успешно зарегистрирована на турнир "${tournament.title}"!`,
+    });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+async function handleTournamentUpdate(user: any, body: any) {
+  const {
+    id,
+    title,
+    description,
+    format,
+    max_teams,
+    is_public,
+    access_code,
+    signup_token,
+    prize_pool,
+    banner_url,
+    status,
+    is_fantasy_locked,
+    is_predictions_locked,
+    grand_final_format,
+    split_participants_losers,
+    break_ties_placement,
+    registration_type,
+    entry_fee_type,
+    teams_required,
+    min_team_size,
+    max_team_size,
+    allow_incomplete_teams,
+    participant_cap,
+    start_time,
+    start_time_tentative,
+    open_voting_all,
+    predictions_bracket,
+    predict_lower_bracket,
+    prediction_scoring_type,
+    allow_predictions_pre_tournament,
+    exp_shareable_images,
+    exp_require_verified_emails,
+    exp_allow_specific_countries,
+    exp_custom_prediction_fields,
+    initial_rerolls,
+  } = body;
+
+  if (!id) {
+    return NextResponse.json({ error: "Укажите ID турнира" }, { status: 400 });
+  }
+
+  const tournRes = await query<{
+    id: string;
+    title: string;
+    description: string | null;
+    format: string;
+    max_teams: number;
+    is_public: boolean;
+    access_code: string | null;
+    prize_pool: string | null;
+    banner_url: string | null;
+    status: string;
+    creator_id: string | null;
+    is_fantasy_locked: boolean;
+    is_predictions_locked: boolean;
+    grand_final_format: string;
+    split_participants_losers: boolean;
+    break_ties_placement: boolean;
+    registration_type: string;
+    entry_fee_type: string;
+    teams_required: boolean;
+    min_team_size: number;
+    max_team_size: number;
+    allow_incomplete_teams: boolean;
+    participant_cap: number;
+    start_time: string | null;
+    start_time_tentative: boolean;
+    open_voting_all: boolean;
+    predictions_bracket: boolean;
+    predict_lower_bracket: boolean;
+    prediction_scoring_type: string;
+    allow_predictions_pre_tournament: boolean;
+    exp_shareable_images: boolean;
+    exp_require_verified_emails: boolean;
+    exp_allow_specific_countries: boolean;
+    exp_custom_prediction_fields: boolean;
+    initial_rerolls: number;
+    signup_token: string | null;
+  }>("SELECT * FROM tournaments WHERE id = $1", [id]);
+
+  if (tournRes.rows.length === 0) {
+    return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+  }
+
+  const current = tournRes.rows[0];
+  const isCreator = Boolean(current.creator_id && current.creator_id === user.id);
+  const isAdmin = user.role === "admin";
+
+  if (!isCreator && !isAdmin) {
+    return NextResponse.json(
+      { error: "У вас нет прав на редактирование этого турнира (только Danislon_Zombovich или администратор)" },
+      { status: 403 }
+    );
+  }
+
+  const updatedTitle = typeof title === "string" ? title.trim() : current.title;
+  if (!updatedTitle || updatedTitle.length < 3) {
+    return NextResponse.json({ error: "Название турнира должно содержать от 3 символов" }, { status: 400 });
+  }
+
+  const updatedDesc = description !== undefined ? (description ? description.trim() : "") : current.description;
+  const updatedFormat = format || current.format;
+  const updatedCap = participant_cap !== undefined ? Number(participant_cap) : (max_teams ? Number(max_teams) : current.max_teams);
+  const updatedPrize = prize_pool !== undefined ? prize_pool : current.prize_pool;
+  const updatedBanner = banner_url !== undefined ? banner_url : current.banner_url;
+  const updatedPublic = is_public !== undefined ? Boolean(is_public) : current.is_public;
+  const updatedCode = updatedPublic ? null : (access_code !== undefined ? access_code : current.access_code);
+  const updatedStatus = status || current.status;
+  const updatedFantasyLock = is_fantasy_locked !== undefined ? Boolean(is_fantasy_locked) : current.is_fantasy_locked;
+  const updatedPredLock = is_predictions_locked !== undefined ? Boolean(is_predictions_locked) : current.is_predictions_locked;
+
+  // Challonge specific updates
+  const updatedGrandFinal = grand_final_format || current.grand_final_format || "two_matches";
+  const updatedSplitLosers = split_participants_losers !== undefined ? Boolean(split_participants_losers) : current.split_participants_losers;
+  const updatedBreakTies = break_ties_placement !== undefined ? Boolean(break_ties_placement) : current.break_ties_placement;
+  const updatedRegType = registration_type || current.registration_type || "public_page";
+  const updatedEntryFee = entry_fee_type || current.entry_fee_type || "free";
+  const updatedTeamsRequired = teams_required !== undefined ? Boolean(teams_required) : current.teams_required;
+  const updatedMinTeam = min_team_size !== undefined ? Number(min_team_size) : (current.min_team_size || 5);
+  const updatedMaxTeam = max_team_size !== undefined ? Number(max_team_size) : (current.max_team_size || 7);
+  const updatedAllowIncomplete = allow_incomplete_teams !== undefined ? Boolean(allow_incomplete_teams) : current.allow_incomplete_teams;
+  const updatedStartTime = start_time !== undefined ? (start_time || null) : current.start_time;
+  const updatedTimeTentative = start_time_tentative !== undefined ? Boolean(start_time_tentative) : current.start_time_tentative;
+  const updatedOpenVoting = open_voting_all !== undefined ? Boolean(open_voting_all) : current.open_voting_all;
+  const updatedPredBracket = predictions_bracket !== undefined ? Boolean(predictions_bracket) : current.predictions_bracket;
+  const updatedPredLower = predict_lower_bracket !== undefined ? Boolean(predict_lower_bracket) : current.predict_lower_bracket;
+  const updatedPredType = prediction_scoring_type || current.prediction_scoring_type || "exponential";
+  const updatedAllowPredPre = allow_predictions_pre_tournament !== undefined ? Boolean(allow_predictions_pre_tournament) : current.allow_predictions_pre_tournament;
+  const updatedExpImages = exp_shareable_images !== undefined ? Boolean(exp_shareable_images) : current.exp_shareable_images;
+  const updatedExpEmails = exp_require_verified_emails !== undefined ? Boolean(exp_require_verified_emails) : current.exp_require_verified_emails;
+  const updatedExpCountries = exp_allow_specific_countries !== undefined ? Boolean(exp_allow_specific_countries) : current.exp_allow_specific_countries;
+  const updatedExpFields = exp_custom_prediction_fields !== undefined ? Boolean(exp_custom_prediction_fields) : current.exp_custom_prediction_fields;
+  const updatedRerolls = initial_rerolls !== undefined ? Number(initial_rerolls) : (current.initial_rerolls || 20);
+  const updatedSignupToken = signup_token !== undefined
+    ? (signup_token ? signup_token.trim() : null)
+    : (current.signup_token || ("ti26_" + crypto.randomBytes(6).toString("hex")));
+
+  await query(
+    `UPDATE tournaments SET
+      title = $1,
+      description = $2,
+      format = $3,
+      max_teams = $4,
+      prize_pool = $5,
+      banner_url = $6,
+      is_public = $7,
+      access_code = $8,
+      status = $9,
+      is_fantasy_locked = $10,
+      is_predictions_locked = $11,
+      grand_final_format = $12,
+      split_participants_losers = $13,
+      break_ties_placement = $14,
+      registration_type = $15,
+      entry_fee_type = $16,
+      teams_required = $17,
+      min_team_size = $18,
+      max_team_size = $19,
+      allow_incomplete_teams = $20,
+      participant_cap = $21,
+      start_time = $22,
+      start_time_tentative = $23,
+      open_voting_all = $24,
+      predictions_bracket = $25,
+      predict_lower_bracket = $26,
+      prediction_scoring_type = $27,
+      allow_predictions_pre_tournament = $28,
+      exp_shareable_images = $29,
+      exp_require_verified_emails = $30,
+      exp_allow_specific_countries = $31,
+      exp_custom_prediction_fields = $32,
+      initial_rerolls = $33,
+      signup_token = $34
+     WHERE id = $35`,
+    [
+      updatedTitle,
+      updatedDesc,
+      updatedFormat,
+      updatedCap,
+      updatedPrize,
+      updatedBanner,
+      updatedPublic,
+      updatedCode,
+      updatedStatus,
+      updatedFantasyLock,
+      updatedPredLock,
+      updatedGrandFinal,
+      updatedSplitLosers,
+      updatedBreakTies,
+      updatedRegType,
+      updatedEntryFee,
+      updatedTeamsRequired,
+      updatedMinTeam,
+      updatedMaxTeam,
+      updatedAllowIncomplete,
+      updatedCap,
+      updatedStartTime,
+      updatedTimeTentative,
+      updatedOpenVoting,
+      updatedPredBracket,
+      updatedPredLower,
+      updatedPredType,
+      updatedAllowPredPre,
+      updatedExpImages,
+      updatedExpEmails,
+      updatedExpCountries,
+      updatedExpFields,
+      updatedRerolls,
+      updatedSignupToken,
+      id,
+    ]
+  );
+
+  return NextResponse.json({
+    success: true,
+    message: `Настройки турнира "${updatedTitle}" успешно сохранены!`,
+    tournament_id: id,
+  });
+}
+
+async function handleTournamentDelete(user: any, tournamentId: string) {
+  if (!tournamentId) {
+    return NextResponse.json({ error: "Укажите ID турнира для удаления" }, { status: 400 });
+  }
+
+  if (tournamentId === "ti-2026-main") {
+    return NextResponse.json({ error: "Главный системный турнир The International 2026 нельзя удалить" }, { status: 400 });
+  }
+
+  const tournRes = await query<{
+    id: string;
+    title: string;
+    creator_id: string | null;
+  }>("SELECT id, title, creator_id FROM tournaments WHERE id = $1", [tournamentId]);
+
+  if (tournRes.rows.length === 0) {
+    return NextResponse.json({ error: "Турнир не найден" }, { status: 404 });
+  }
+
+  const current = tournRes.rows[0];
+  const isCreator = Boolean(current.creator_id && current.creator_id === user.id);
+  const isAdmin = user.role === "admin";
+
+  if (!isCreator && !isAdmin) {
+    return NextResponse.json(
+      { error: "У вас нет прав на удаление этого турнира (только создатель или администратор)" },
+      { status: 403 }
+    );
+  }
+
+  // Cascade delete matches, teams associations, predictions, fantasy cards
+  await query("DELETE FROM tournament_teams WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM matches WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM predictions WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM fantasy_cards WHERE tournament_id = $1", [tournamentId]);
+  await query("DELETE FROM tournaments WHERE id = $1", [tournamentId]);
+
+  return NextResponse.json({
+    success: true,
+    message: `Турнир "${current.title}" успешно удален!`,
+  });
+}
+
+export async function PUT(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    const body = await req.json();
+    return await handleTournamentUpdate(user, body);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    const body = await req.json();
+    return await handleTournamentUpdate(user, body);
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return NextResponse.json({ error: "Необходима авторизация" }, { status: 401 });
+    const { searchParams } = new URL(req.url);
+    const tournamentId = searchParams.get("id") || searchParams.get("tournament_id");
+    return await handleTournamentDelete(user, tournamentId || "");
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || "Ошибка сервера" }, { status: 500 });
+  }
+}

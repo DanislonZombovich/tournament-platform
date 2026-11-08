@@ -1,0 +1,46 @@
+{
+  "name": "tournament-platform",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "./node_modules/.bin/next dev",
+    "build": "./node_modules/.bin/next build",
+    "start": "./node_modules/.bin/next start",
+    "lint": "./node_modules/.bin/eslint",
+    "test": "./node_modules/.bin/tsc --types node src/tests/fantasy.test.ts src/tests/bracket.test.ts src/tests/tournament_flow.test.ts src/lib/fantasy.ts src/lib/bracket.ts src/lib/db.ts --outDir ./dist-tests --module commonjs --target es2022 --esModuleInterop --skipLibCheck && node ./dist-tests/tests/fantasy.test.js && node ./dist-tests/tests/bracket.test.js && node ./dist-tests/tests/tournament_flow.test.js",
+    "build:worker": "opennextjs-cloudflare build",
+    "preview": "opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv env.d.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "@next/swc-linux-x64-gnu": "^16.4.3",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "csstype": "^3.2.3",
+    "jose": "^6.2.14",
+    "lucide-react": "^1.66.0",
+    "next": "16.4.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwind-merge": "^3.7.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.15",
+    "@opennextjs/cloudflare": "^1.20.15",
+    "@types/bcryptjs": "^3.0.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.6.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^5",
+    "wrangler": "^4.156.1"
+  }
+}

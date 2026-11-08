@@ -1,0 +1,402 @@
+import crypto from "crypto";
+import { query } from "./db";
+
+export interface MatchEntity {
+  id: string;
+  tournament_id: string;
+  match_code: string;
+  bracket_type: "upper" | "lower" | "grand_final";
+  round_name: string;
+  team1_id: string | null;
+  team2_id: string | null;
+  team1_score: number;
+  team2_score: number;
+  winner_id: string | null;
+  status: "pending" | "in_progress" | "completed";
+  match_order: number;
+}
+
+export const BRACKET_MATCH_DEFINITIONS = [
+  { match_code: "UB1", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 1 (Bo3)", match_order: 1 },
+  { match_code: "UB2", bracket_type: "upper" as const, round_name: "Верхняя сетка — Полуфинал 2 (Bo3)", match_order: 2 },
+  { match_code: "LB1", bracket_type: "lower" as const, round_name: "Нижняя сетка — Раунд 1 (Bo3)", match_order: 3 },
+  { match_code: "UBF", bracket_type: "upper" as const, round_name: "Верхняя сетка — Финал (Bo3)", match_order: 4 },
+  { match_code: "LBF", bracket_type: "lower" as const, round_name: "Нижняя сетка — Финал (Bo3)", match_order: 5 },
+  { match_code: "GF", bracket_type: "grand_final" as const, round_name: "Гранд-Финал (Bo3)", match_order: 6 },
+];
+
+export async function generateMatchesForTournament(
+  tournamentId: string,
+  format: string = "double_elimination",
+  maxTeams: number = 4,
+  forceRegenerate: boolean = false
+) {
+  if (forceRegenerate) {
+    await query(`DELETE FROM match_player_stats WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
+    await query(`DELETE FROM predictions WHERE match_id IN (SELECT id FROM matches WHERE tournament_id = $1)`, [tournamentId]);
+    await query(`DELETE FROM matches WHERE tournament_id = $1`, [tournamentId]);
+  } else {
+    const existing = await query(`SELECT id FROM matches WHERE tournament_id = $1`, [tournamentId]);
+    if (existing.rows.length > 0) return;
+  }
+
+  const defs: { match_code: string; bracket_type: "upper" | "lower" | "grand_final"; round_name: string; match_order: number }[] = [];
+
+  if (format === "single_elimination") {
+    if (maxTeams <= 2) {
+      defs.push(
+        { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 1 }
+      );
+    } else if (maxTeams <= 4) {
+      defs.push(
+        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1 (Bo3)", match_order: 1 },
+        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2 (Bo3)", match_order: 2 },
+        { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 3 }
+      );
+    } else if (maxTeams <= 8) {
+      defs.push(
+        { match_code: "QF1", bracket_type: "upper", round_name: "Четвертьфинал 1 (Bo3)", match_order: 1 },
+        { match_code: "QF2", bracket_type: "upper", round_name: "Четвертьфинал 2 (Bo3)", match_order: 2 },
+        { match_code: "QF3", bracket_type: "upper", round_name: "Четвертьфинал 3 (Bo3)", match_order: 3 },
+        { match_code: "QF4", bracket_type: "upper", round_name: "Четвертьфинал 4 (Bo3)", match_order: 4 },
+        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1 (Bo3)", match_order: 5 },
+        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2 (Bo3)", match_order: 6 },
+        { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 7 }
+      );
+    } else {
+      defs.push(
+        { match_code: "R16_1", bracket_type: "upper", round_name: "1/8 финала 1 (Bo3)", match_order: 1 },
+        { match_code: "R16_2", bracket_type: "upper", round_name: "1/8 финала 2 (Bo3)", match_order: 2 },
+        { match_code: "R16_3", bracket_type: "upper", round_name: "1/8 финала 3 (Bo3)", match_order: 3 },
+        { match_code: "R16_4", bracket_type: "upper", round_name: "1/8 финала 4 (Bo3)", match_order: 4 },
+        { match_code: "R16_5", bracket_type: "upper", round_name: "1/8 финала 5 (Bo3)", match_order: 5 },
+        { match_code: "R16_6", bracket_type: "upper", round_name: "1/8 финала 6 (Bo3)", match_order: 6 },
+        { match_code: "R16_7", bracket_type: "upper", round_name: "1/8 финала 7 (Bo3)", match_order: 7 },
+        { match_code: "R16_8", bracket_type: "upper", round_name: "1/8 финала 8 (Bo3)", match_order: 8 },
+        { match_code: "QF1", bracket_type: "upper", round_name: "Четвертьфинал 1 (Bo3)", match_order: 9 },
+        { match_code: "QF2", bracket_type: "upper", round_name: "Четвертьфинал 2 (Bo3)", match_order: 10 },
+        { match_code: "QF3", bracket_type: "upper", round_name: "Четвертьфинал 3 (Bo3)", match_order: 11 },
+        { match_code: "QF4", bracket_type: "upper", round_name: "Четвертьфинал 4 (Bo3)", match_order: 12 },
+        { match_code: "SF1", bracket_type: "upper", round_name: "Полуфинал 1 (Bo3)", match_order: 13 },
+        { match_code: "SF2", bracket_type: "upper", round_name: "Полуфинал 2 (Bo3)", match_order: 14 },
+        { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 15 }
+      );
+    }
+  } else {
+    // Double Elimination
+    if (maxTeams > 4) {
+      defs.push(
+        { match_code: "UB1", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 1 (Bo3)", match_order: 1 },
+        { match_code: "UB2", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 2 (Bo3)", match_order: 2 },
+        { match_code: "UB3", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 3 (Bo3)", match_order: 3 },
+        { match_code: "UB4", bracket_type: "upper", round_name: "Верхняя сетка — 1/4 финала 4 (Bo3)", match_order: 4 },
+        { match_code: "UBF1", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 1 (Bo3)", match_order: 5 },
+        { match_code: "UBF2", bracket_type: "upper", round_name: "Верхняя сетка — Полуфинал 2 (Bo3)", match_order: 6 },
+        { match_code: "UBF", bracket_type: "upper", round_name: "Верхняя сетка — Финал (Bo3)", match_order: 7 },
+        { match_code: "LB1", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1 (Матч 1) (Bo3)", match_order: 8 },
+        { match_code: "LB2", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 1 (Матч 2) (Bo3)", match_order: 9 },
+        { match_code: "LB3", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 2 (Матч 1) (Bo3)", match_order: 10 },
+        { match_code: "LB4", bracket_type: "lower", round_name: "Нижняя сетка — Раунд 2 (Матч 2) (Bo3)", match_order: 11 },
+        { match_code: "LB_SF", bracket_type: "lower", round_name: "Нижняя сетка — Полуфинал (Bo3)", match_order: 12 },
+        { match_code: "LBF", bracket_type: "lower", round_name: "Нижняя сетка — Финал (Bo3)", match_order: 13 },
+        { match_code: "GF", bracket_type: "grand_final", round_name: "Гранд-Финал (Bo3)", match_order: 14 }
+      );
+    } else {
+      defs.push(...BRACKET_MATCH_DEFINITIONS);
+    }
+  }
+
+  const regTeamsRes = await query<{ team_id: string }>(
+    `SELECT team_id FROM tournament_teams WHERE tournament_id = $1 ORDER BY seed ASC NULLS LAST, created_at ASC`,
+    [tournamentId]
+  );
+  const regTeamIds = regTeamsRes.rows.map((r) => r.team_id);
+
+  for (const def of defs) {
+    const id = "m_" + crypto.randomBytes(8).toString("hex");
+    let team1_id: string | null = null;
+    let team2_id: string | null = null;
+
+    if (maxTeams <= 4) {
+      if ((def.match_code === "UB1" || def.match_code === "SF1") && regTeamIds.length >= 2) {
+        team1_id = regTeamIds[0];
+        team2_id = regTeamIds[1];
+      } else if ((def.match_code === "UB2" || def.match_code === "SF2") && regTeamIds.length >= 4) {
+        team1_id = regTeamIds[2];
+        team2_id = regTeamIds[3];
+      }
+    } else if (maxTeams <= 8) {
+      if ((def.match_code === "UB1" || def.match_code === "QF1") && regTeamIds.length >= 2) {
+        team1_id = regTeamIds[0];
+        team2_id = regTeamIds[1];
+      } else if ((def.match_code === "UB2" || def.match_code === "QF2") && regTeamIds.length >= 4) {
+        team1_id = regTeamIds[2];
+        team2_id = regTeamIds[3];
+      } else if ((def.match_code === "UB3" || def.match_code === "QF3") && regTeamIds.length >= 6) {
+        team1_id = regTeamIds[4];
+        team2_id = regTeamIds[5];
+      } else if ((def.match_code === "UB4" || def.match_code === "QF4") && regTeamIds.length >= 8) {
+        team1_id = regTeamIds[6];
+        team2_id = regTeamIds[7];
+      }
+    } else {
+      const r16Index = ["R16_1", "R16_2", "R16_3", "R16_4", "R16_5", "R16_6", "R16_7", "R16_8"].indexOf(def.match_code);
+      if (r16Index !== -1 && regTeamIds.length >= (r16Index + 1) * 2) {
+        team1_id = regTeamIds[r16Index * 2];
+        team2_id = regTeamIds[r16Index * 2 + 1];
+      }
+    }
+
+    await query(
+      `INSERT INTO matches (id, tournament_id, match_code, bracket_type, round_name, match_order, status, team1_id, team2_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8)`,
+      [id, tournamentId, def.match_code, def.bracket_type, def.round_name, def.match_order, team1_id, team2_id]
+    );
+  }
+}
+
+async function setDownstreamMatchTeam(
+  tournamentId: string,
+  matchCode: string,
+  slot: "team1_id" | "team2_id",
+  teamId: string
+) {
+  const currentMatchRes = await query<{
+    id: string;
+    team1_id: string | null;
+    team2_id: string | null;
+    status: string;
+    winner_id: string | null;
+  }>(
+    `SELECT id, team1_id, team2_id, status, winner_id FROM matches WHERE tournament_id = $1 AND match_code = $2`,
+    [tournamentId, matchCode]
+  );
+
+  if (currentMatchRes.rows.length === 0) return;
+  const match = currentMatchRes.rows[0];
+  const oldTeamInSlot = slot === "team1_id" ? match.team1_id : match.team2_id;
+
+  if (oldTeamInSlot !== teamId) {
+    if (match.status === "completed") {
+      await query(
+        `UPDATE matches SET ${slot} = $1, status = 'pending', team1_score = 0, team2_score = 0, winner_id = NULL
+         WHERE id = $2`,
+        [teamId, match.id]
+      );
+      await query(`DELETE FROM match_player_stats WHERE match_id = $1`, [match.id]);
+      await query(
+        `UPDATE predictions SET points_awarded = 0, is_calculated = false WHERE match_id = $1`,
+        [match.id]
+      );
+    } else {
+      await query(`UPDATE matches SET ${slot} = $1 WHERE id = $2`, [teamId, match.id]);
+    }
+  }
+}
+
+export async function advanceTournamentBracket(
+  tournamentId: string,
+  matchCode: string,
+  winnerId: string,
+  loserId: string
+) {
+  const tournRes = await query<{ format: string }>(
+    `SELECT format FROM tournaments WHERE id = $1`,
+    [tournamentId]
+  );
+  const format = tournRes.rows[0]?.format || "double_elimination";
+
+  if (format === "single_elimination") {
+    // Single elimination bracket advancement
+    if (matchCode === "R16_1") await setDownstreamMatchTeam(tournamentId, "QF1", "team1_id", winnerId);
+    else if (matchCode === "R16_2") await setDownstreamMatchTeam(tournamentId, "QF1", "team2_id", winnerId);
+    else if (matchCode === "R16_3") await setDownstreamMatchTeam(tournamentId, "QF2", "team1_id", winnerId);
+    else if (matchCode === "R16_4") await setDownstreamMatchTeam(tournamentId, "QF2", "team2_id", winnerId);
+    else if (matchCode === "R16_5") await setDownstreamMatchTeam(tournamentId, "QF3", "team1_id", winnerId);
+    else if (matchCode === "R16_6") await setDownstreamMatchTeam(tournamentId, "QF3", "team2_id", winnerId);
+    else if (matchCode === "R16_7") await setDownstreamMatchTeam(tournamentId, "QF4", "team1_id", winnerId);
+    else if (matchCode === "R16_8") await setDownstreamMatchTeam(tournamentId, "QF4", "team2_id", winnerId);
+    else if (matchCode === "QF1") await setDownstreamMatchTeam(tournamentId, "SF1", "team1_id", winnerId);
+    else if (matchCode === "QF2") await setDownstreamMatchTeam(tournamentId, "SF1", "team2_id", winnerId);
+    else if (matchCode === "QF3") await setDownstreamMatchTeam(tournamentId, "SF2", "team1_id", winnerId);
+    else if (matchCode === "QF4") await setDownstreamMatchTeam(tournamentId, "SF2", "team2_id", winnerId);
+    else if (matchCode === "SF1") await setDownstreamMatchTeam(tournamentId, "GF", "team1_id", winnerId);
+    else if (matchCode === "SF2") await setDownstreamMatchTeam(tournamentId, "GF", "team2_id", winnerId);
+    return;
+  }
+
+  // Double Elimination
+  const ubf1Check = await query(
+    `SELECT id FROM matches WHERE tournament_id = $1 AND match_code = 'UBF1'`,
+    [tournamentId]
+  );
+  const isEightTeamDE = ubf1Check.rows.length > 0;
+
+  if (isEightTeamDE) {
+    if (matchCode === "UB1") {
+      await setDownstreamMatchTeam(tournamentId, "UBF1", "team1_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB1", "team1_id", loserId);
+    } else if (matchCode === "UB2") {
+      await setDownstreamMatchTeam(tournamentId, "UBF1", "team2_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB1", "team2_id", loserId);
+    } else if (matchCode === "UB3") {
+      await setDownstreamMatchTeam(tournamentId, "UBF2", "team1_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB2", "team1_id", loserId);
+    } else if (matchCode === "UB4") {
+      await setDownstreamMatchTeam(tournamentId, "UBF2", "team2_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB2", "team2_id", loserId);
+    } else if (matchCode === "UBF1") {
+      await setDownstreamMatchTeam(tournamentId, "UBF", "team1_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB3", "team1_id", loserId);
+    } else if (matchCode === "UBF2") {
+      await setDownstreamMatchTeam(tournamentId, "UBF", "team2_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB4", "team1_id", loserId);
+    } else if (matchCode === "LB1") {
+      await setDownstreamMatchTeam(tournamentId, "LB3", "team2_id", winnerId);
+    } else if (matchCode === "LB2") {
+      await setDownstreamMatchTeam(tournamentId, "LB4", "team2_id", winnerId);
+    } else if (matchCode === "LB3") {
+      await setDownstreamMatchTeam(tournamentId, "LB_SF", "team1_id", winnerId);
+    } else if (matchCode === "LB4") {
+      await setDownstreamMatchTeam(tournamentId, "LB_SF", "team2_id", winnerId);
+    } else if (matchCode === "LB_SF") {
+      await setDownstreamMatchTeam(tournamentId, "LBF", "team2_id", winnerId);
+    } else if (matchCode === "UBF") {
+      await setDownstreamMatchTeam(tournamentId, "GF", "team1_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LBF", "team1_id", loserId);
+    } else if (matchCode === "LBF") {
+      await setDownstreamMatchTeam(tournamentId, "GF", "team2_id", winnerId);
+    }
+  } else {
+    // 4-team standard Double Elimination
+    if (matchCode === "UB1") {
+      await setDownstreamMatchTeam(tournamentId, "UBF", "team1_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB1", "team1_id", loserId);
+    } else if (matchCode === "UB2") {
+      await setDownstreamMatchTeam(tournamentId, "UBF", "team2_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LB1", "team2_id", loserId);
+    } else if (matchCode === "UBF") {
+      await setDownstreamMatchTeam(tournamentId, "GF", "team1_id", winnerId);
+      await setDownstreamMatchTeam(tournamentId, "LBF", "team1_id", loserId);
+    } else if (matchCode === "LB1") {
+      await setDownstreamMatchTeam(tournamentId, "LBF", "team2_id", winnerId);
+    } else if (matchCode === "LBF") {
+      await setDownstreamMatchTeam(tournamentId, "GF", "team2_id", winnerId);
+    }
+  }
+}
+
+export async function advanceDoubleElimination(
+  tournamentId: string,
+  matchCode: string,
+  winnerId: string,
+  loserId: string
+) {
+  return advanceTournamentBracket(tournamentId, matchCode, winnerId, loserId);
+}
+
+export function evaluatePredictionPoints(
+  predWinnerId: string,
+  predT1: number,
+  predT2: number,
+  actualWinnerId: string,
+  actualT1: number,
+  actualT2: number,
+  correctStreakIndex: number = 1
+): number {
+  if (predWinnerId !== actualWinnerId) {
+    return 0;
+  }
+  const multiplier = Math.max(1, correctStreakIndex);
+  let points = multiplier * 500;
+  if (predT1 === actualT1 && predT2 === actualT2) {
+    points += multiplier * 500;
+  }
+  return points;
+}
+
+export async function recalculateTournamentPredictions(tournamentId: string) {
+  // Reset uncompleted matches
+  await query(
+    `UPDATE predictions
+     SET points_awarded = 0, is_calculated = false
+     WHERE match_id IN (
+       SELECT id FROM matches WHERE tournament_id = $1 AND status != 'completed'
+     )`,
+    [tournamentId]
+  );
+
+  // Completed matches in order
+  const matchesRes = await query<{
+    id: string;
+    team1_score: number;
+    team2_score: number;
+    winner_id: string;
+    match_order: number;
+  }>(
+    `SELECT id, team1_score, team2_score, winner_id, match_order
+     FROM matches
+     WHERE tournament_id = $1 AND status = 'completed' AND winner_id IS NOT NULL
+     ORDER BY match_order ASC, id ASC`,
+    [tournamentId]
+  );
+
+  if (matchesRes.rows.length === 0) return;
+
+  const matchMap = new Map(matchesRes.rows.map((m) => [m.id, m]));
+
+  // Predictions for completed matches
+  const predsRes = await query<{
+    id: string;
+    user_id: string;
+    match_id: string;
+    predicted_winner_id: string;
+    predicted_team1_score: number;
+    predicted_team2_score: number;
+  }>(
+    `SELECT p.id, p.user_id, p.match_id, p.predicted_winner_id, p.predicted_team1_score, p.predicted_team2_score
+     FROM predictions p
+     JOIN matches m ON m.id = p.match_id
+     WHERE m.tournament_id = $1 AND m.status = 'completed'
+     ORDER BY m.match_order ASC, m.id ASC`,
+    [tournamentId]
+  );
+
+  const userPredsMap = new Map<string, typeof predsRes.rows>();
+  for (const pred of predsRes.rows) {
+    if (!userPredsMap.has(pred.user_id)) {
+      userPredsMap.set(pred.user_id, []);
+    }
+    userPredsMap.get(pred.user_id)!.push(pred);
+  }
+
+  for (const [, preds] of userPredsMap.entries()) {
+    let correctCount = 0;
+    for (const p of preds) {
+      const match = matchMap.get(p.match_id);
+      if (!match) continue;
+
+      if (p.predicted_winner_id === match.winner_id) {
+        correctCount += 1;
+        const pts = evaluatePredictionPoints(
+          p.predicted_winner_id,
+          p.predicted_team1_score,
+          p.predicted_team2_score,
+          match.winner_id,
+          match.team1_score,
+          match.team2_score,
+          correctCount
+        );
+        await query(
+          `UPDATE predictions SET points_awarded = $1, is_calculated = true WHERE id = $2`,
+          [pts, p.id]
+        );
+      } else {
+        await query(
+          `UPDATE predictions SET points_awarded = 0, is_calculated = true WHERE id = $1`,
+          [p.id]
+        );
+      }
+    }
+  }
+}
